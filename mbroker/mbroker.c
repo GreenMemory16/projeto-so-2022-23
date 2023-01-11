@@ -159,17 +159,17 @@ int main(int argc, char **argv) {
         }
 
         int op_code;
-        char clientPipeName[PIPE_NAME_SIZE];
-        char boxName[BOX_NAME_SIZE];
+        packet_t packet;
 
         while (try_read(registerPipe, &op_code, sizeof(int)) > 0) {
             switch (op_code) {
             case REGISTER_PUBLISHER: {
                 // parse_register_publisher(op_code);
-                try_read(registerPipe, clientPipeName, sizeof(clientPipeName));
-                try_read(registerPipe, boxName, sizeof(boxName));
-                printf("%s\n", clientPipeName);
-                printf("%s\n", boxName);
+                try_read(registerPipe, &packet, sizeof(packet_t));
+                printf("%s\n", packet.client_pipe);
+                printf("%s\n", packet.box_name);
+                printf("%d\n", packet.opcode);
+                printf("%s\n", packet.message);
                 printf("Reading command 1\n");
                 break;
             }

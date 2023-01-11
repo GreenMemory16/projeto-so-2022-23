@@ -7,7 +7,7 @@
 #define BOX_NAME_SIZE 32
 #define MESSAGE_SIZE 1024
 
-enum {
+enum packet_opcode_t {
     REGISTER_PUBLISHER = 1,
     REGISTER_SUBSCRIBER = 2,
     CREATE_MAILBOX = 3,
@@ -20,11 +20,11 @@ enum {
     SEND_MESSAGE = 10
 };
 
-
 typedef struct packet_t {
     int opcode;
     char client_pipe[PIPE_NAME_SIZE + 1];
     char box_name[BOX_NAME_SIZE + 1];
+    char message[MESSAGE_SIZE + 1];
 } packet_t;
 
 typedef struct worker_t {

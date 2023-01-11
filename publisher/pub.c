@@ -12,7 +12,6 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-
 int main(int argc, char **argv) {
     char *registerPipeName;
     char *pipeName;
@@ -33,10 +32,16 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    int opcode = REGISTER_PUBLISHER;
     packet_t register_packet;
+    printf("Registering publisher...\n");
+    printf("Publisher name: %s\n", pipeName);
+    printf("Box name: %s\n", boxName);
+
     register_packet.opcode = REGISTER_PUBLISHER;
     memcpy(register_packet.client_pipe, pipeName, strlen(pipeName) + 1);
     memcpy(register_packet.box_name, boxName, strlen(boxName) + 1);
+    memset(register_packet.message, 0, MESSAGE_SIZE);
 
     // Create pipe (and delete first if it exists)
     if (unlink(pipeName) != 0 && errno != ENOENT) {
@@ -49,6 +54,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    write(registerPipe, &opcode, sizeof(int));
     if (write(registerPipe, &register_packet, sizeof(packet_t)) < 0) {
         perror("Failed to write to register pipe");
         return EXIT_FAILURE;
