@@ -14,56 +14,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-#define PIPE_PATH_SIZE 256
-#define BOX_NAME_SIZE 32
-#define ERROR_MESSAGE_SIZE 1024
-
-typedef struct packet_t {
-    int opcode;
-    char client_pipe[PIPE_PATH_SIZE + 1];
-    char box_name[BOX_NAME_SIZE + 1];
-} packet_t;
-
-typedef struct worker_t {
-    // what else
-    packet_t packet;
-    pthread_t thread;
-    pthread_mutex_t lock;
-    pthread_cond_t cond;
-} worker_t;
-
-enum {
-    REGISTER_PUBLISHER = 1,
-    REGISTER_SUBSCRIBER = 2,
-    CREATE_MAILBOX = 3,
-    CREATE_MAILBOX_ANSWER = 4,
-    REMOVE_MAILBOX = 5,
-    REMOVE_MAILBOX_ANSWER = 6,
-    LIST_MAILBOXES = 7,
-    LIST_MAILBOXES_ANSWER = 8,
-    PUBLISHER_MESSAGES = 9,
-    MESSAGE_SENDER = 10
-};
-
-static int myPipe;
-static char *registerPipe;
+static int registerPipe;
+static char *registerPipeName;
 static size_t maxSessions;
 static worker_t *workers;
-
-void close_server(int status) {
-    if (close(myPipe) < 0) {
-        perror("Failed to close pipe\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (unlink(registerPipe) != 0 && errno != ENOENT) {
-        perror("Failed to delete pipe");
-        exit(EXIT_FAILURE);
-    }
-
-    printf("\nSuccessfully ended the server.\n");
-    exit(status);
-}
 
 ssize_t try_read(int fd, void *buf, size_t count) {
     ssize_t bytes_read;
@@ -76,29 +30,31 @@ ssize_t try_read(int fd, void *buf, size_t count) {
 void *session_worker(void *args) {
     worker_t *worker = (worker_t *)args;
     while (true) {
-        printf("Waiting for command\n");
         pthread_mutex_lock(&worker->lock);
+        while (worker->packet.opcode == 0) {
+            pthread_cond_wait(&worker->cond, &worker->lock);
+        }
 
         switch (worker->packet.opcode) {
         case REGISTER_PUBLISHER: {
             // parse_register_publisher(op_code);
-            printf("Reading command 1\n");
+            printf("Thread Reading command 1\n");
             break;
         }
         case REGISTER_SUBSCRIBER: {
-            printf("Reading command 2\n");
+            printf("Thread Reading command 2\n");
             break;
         }
         case CREATE_MAILBOX: {
-            printf("Reading command 3\n");
+            printf("Thread Reading command 3\n");
             break;
         }
         case REMOVE_MAILBOX: {
-            printf("Reading command 5\n");
+            printf("Thread Reading command 5\n");
             break;
         }
         case LIST_MAILBOXES: {
-            printf("Reading command 7\n");
+            printf("Thread Reading command 7\n");
             break;
         }
         default: {
@@ -114,11 +70,35 @@ int start_server() {
     workers = malloc(sizeof(worker_t) * maxSessions);
     for (int i = 0; i < maxSessions; ++i) {
         printf("Creating thread\n");
-        pthread_mutex_init(&workers[i].lock, NULL);
-        pthread_cond_init(&workers[i].cond, NULL);
-        pthread_create(&workers[i].thread, NULL, session_worker, &workers[i]);
+        if (pthread_mutex_init(&workers[i].lock, NULL) != 0) {
+            return -1;
+        }
+        if (pthread_cond_init(&workers[i].cond, NULL) != 0) {
+            return -1;
+        }
+        if (pthread_create(&workers[i].thread, NULL, session_worker,
+                           &workers[i]) != 0) {
+            return -1;
+        }
     }
     return 0;
+}
+
+void close_server(int status) {
+    if (close(registerPipe) < 0) {
+        perror("Failed to close pipe\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (unlink(registerPipeName) != 0 && errno != ENOENT) {
+        perror("Failed to delete pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    free(workers);
+
+    printf("\nSuccessfully ended the server.\n");
+    exit(status);
 }
 
 int main(int argc, char **argv) {
@@ -128,10 +108,9 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-
+    registerPipeName = argv[1];
     maxSessions = strtoul(argv[2], NULL, 10);
-    registerPipe = argv[1];
-    printf("Starting server with pipe named %s\n", registerPipe);
+    printf("Starting server with pipe named %s\n", registerPipeName);
 
     if (start_server() != 0) {
         printf("Failed: Couldn't start server\n");
@@ -147,25 +126,25 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    if (unlink(registerPipe) != 0 && errno != ENOENT) {
+    if (unlink(registerPipeName) != 0 && errno != ENOENT) {
         perror("Failed: Couldn't delete pipes\n");
         exit(EXIT_FAILURE);
     }
 
-    if (mkfifo(registerPipe, 0640) != 0) {
+    if (mkfifo(registerPipeName, 0640) != 0) {
         perror("Failed: Couldn't create pipes\n");
         exit(EXIT_FAILURE);
     }
 
-    myPipe = open(registerPipe, O_RDONLY);
-    if (myPipe < 0) {
+    registerPipe = open(registerPipeName, O_RDONLY);
+    if (registerPipe < 0) {
         perror("Fail: Couldn't open server pipe\n");
-        unlink(registerPipe);
+        unlink(registerPipeName);
         exit(EXIT_FAILURE);
     }
 
     while (true) {
-        int tempPipe = open(registerPipe, O_RDONLY);
+        int tempPipe = open(registerPipeName, O_RDONLY);
 
         if (tempPipe < 0) {
             if (errno == ENOENT) {
@@ -180,11 +159,17 @@ int main(int argc, char **argv) {
         }
 
         int op_code;
+        char clientPipeName[PIPE_NAME_SIZE];
+        char boxName[BOX_NAME_SIZE];
 
-        while (try_read(myPipe, &op_code, sizeof(int)) > 0) {
+        while (try_read(registerPipe, &op_code, sizeof(int)) > 0) {
             switch (op_code) {
             case REGISTER_PUBLISHER: {
                 // parse_register_publisher(op_code);
+                try_read(registerPipe, clientPipeName, sizeof(clientPipeName));
+                try_read(registerPipe, boxName, sizeof(boxName));
+                printf("%s\n", clientPipeName);
+                printf("%s\n", boxName);
                 printf("Reading command 1\n");
                 break;
             }
@@ -219,11 +204,11 @@ int main(int argc, char **argv) {
 }
 
 // void parse_register_publisher(int op_code) {
-//     char pipePath[PIPE_PATH_SIZE];
+//     char pipePath[PIPE_NAME_SIZE];
 //     char boxName[BOX_NAME_SIZE];
 
 //     // read pipe path
-//     ssize_t bytes_read = try_read(myPipe, pipePath, PIPE_PATH_SIZE);
+//     ssize_t bytes_read = try_read(myPipe, pipePath, PIPE_NAME_SIZE);
 //     if (bytes_read < 0) {
 //         perror("Failed to read from pipe\n");
 //         close_server(EXIT_FAILURE);
@@ -238,11 +223,11 @@ int main(int argc, char **argv) {
 // }
 
 // void parse_list_mailboxes(int op_code) {
-//     char clientNamePipePath[PIPE_PATH_SIZE];
+//     char clientNamePipePath[PIPE_NAME_SIZE];
 
 //     // read pipe path
 //     ssize_t bytes_read = try_read(myPipe, clientNamePipePath,
-//     PIPE_PATH_SIZE); if (bytes_read < 0) {
+//     PIPE_NAME_SIZE); if (bytes_read < 0) {
 //         perror("Failed to read from pipe\n");
 //         close_server(EXIT_FAILURE);
 //     }

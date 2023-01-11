@@ -3,6 +3,38 @@
 
 #include <stdint.h>
 
+#define PIPE_NAME_SIZE 256
+#define BOX_NAME_SIZE 32
+#define MESSAGE_SIZE 1024
+
+enum {
+    REGISTER_PUBLISHER = 1,
+    REGISTER_SUBSCRIBER = 2,
+    CREATE_MAILBOX = 3,
+    CREATE_MAILBOX_ANSWER = 4,
+    REMOVE_MAILBOX = 5,
+    REMOVE_MAILBOX_ANSWER = 6,
+    LIST_MAILBOXES = 7,
+    LIST_MAILBOXES_ANSWER = 8,
+    PUBLISH_MESSAGE = 9,
+    SEND_MESSAGE = 10
+};
+
+
+typedef struct packet_t {
+    int opcode;
+    char client_pipe[PIPE_NAME_SIZE + 1];
+    char box_name[BOX_NAME_SIZE + 1];
+} packet_t;
+
+typedef struct worker_t {
+    // what else
+    packet_t packet;
+    pthread_t thread;
+    pthread_mutex_t lock;
+    pthread_cond_t cond;
+} worker_t;
+
 /* I don't know how to organize the structs for them to be parsed correctly in*/
 /* the mbroker, so I'm just gonna use the dumb_struct for now.                */
 
