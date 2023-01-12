@@ -3,10 +3,10 @@
 #include "operations.h"
 #include "protocol.h"
 #include "pthread.h"
-#include "unistd.h"
 #include "utils.h"
 #include <fcntl.h>
 #include <semaphore.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 static int registerPipe;
 static char *registerPipeName;
@@ -53,7 +54,6 @@ void *session_worker(void *args) {
             int box = tfs_open(payload.box_name, TFS_O_EXISTS);
             if (box == -1) {
                 fprintf(stderr, "Failed to open box\n");
-
             }
 
             // wait for new message
@@ -112,25 +112,26 @@ void *session_worker(void *args) {
 
             int pipe = open(pipeName, O_WRONLY);
 
-            int box = tfs_open(payload.box_name, TFS_O_EXISTS);
-            
-            char *message;
+            // int box = tfs_open(payload.box_name, TFS_O_EXISTS);
+
+            // char *message;
             packet_t new_packet;
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
 
-            if (box == -1) {
-                // Box already exists
-                // Sends "ERROR" message to manager
-                message = "ERROR: box already exists\n";
-                new_packet.payload.answer_data.return_code = -1;
-                memcpy(new_packet.payload.answer_data.error_message,
-                    message, strlen(message)+1);
+            // if (box == -1) {
+            //     // Box already exists
+            //     // Sends "ERROR" message to manager
+            //     message = "ERROR: box already exists\n";
+            //     new_packet.payload.answer_data.return_code = -1;
+            //     memcpy(new_packet.payload.answer_data.error_message,
+            //         message, strlen(message)+1);
 
-                write(pipe, &new_packet, sizeof(packet_t));
-            }
-            
+            //     write(pipe, &new_packet, sizeof(packet_t));
+            // }
+
             // Sends "OK" message to manager
             new_packet.payload.answer_data.return_code = 0;
+            write(pipe, &new_packet, sizeof(packet_t));
 
             // Creates Mailbox
             int box = tfs_open(payload.box_name, TFS_O_CREAT);
@@ -160,7 +161,6 @@ void *session_worker(void *args) {
 int start_server() {
     workers = malloc(sizeof(worker_t) * maxSessions);
     for (int i = 0; i < maxSessions; ++i) {
-        printf("Creating thread\n");
         if (pthread_mutex_init(&workers[i].lock, NULL) != 0) {
             return -1;
         }
@@ -197,6 +197,8 @@ int main(int argc, char **argv) {
         printf("Failed: Couldn't start server\n");
         return EXIT_FAILURE;
     }
+
+    signal(SIGINT, close_server);
 
     registerPipeName = argv[1];
     maxSessions = strtoul(argv[2], NULL, 10);
