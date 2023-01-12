@@ -21,7 +21,7 @@ enum packet_opcode_t {
 };
 
 typedef struct packet_t {
-    int opcode;
+    uint8_t opcode;
     char client_pipe[PIPE_NAME_SIZE + 1];
     char box_name[BOX_NAME_SIZE + 1];
     char message[MESSAGE_SIZE + 1];
