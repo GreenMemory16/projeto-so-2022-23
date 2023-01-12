@@ -44,7 +44,8 @@ void *session_worker(void *args) {
         switch (packet.opcode) {
         case REGISTER_PUBLISHER: {
             printf("Registering Publisher\n");
-            char *pipeName = packet.client_pipe;
+            registration_data_t payload = packet.payload.registration_data;
+            char *pipeName = payload.client_pipe;
 
             // open client pipe
             int pipe = open(pipeName, O_RDONLY);
@@ -52,7 +53,7 @@ void *session_worker(void *args) {
             // wait for new message
             packet_t new_packet;
             while (try_read(pipe, &new_packet, sizeof(packet_t)) > 0) {
-                printf("Reading %s\n", new_packet.message);
+                printf("Reading %s\n", new_packet.payload.message_data.message);
             }
             break;
         }

@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     char *boxName;
 
     if (argc < 3) {
-        printf("Failed: Publisher need 3 arguments");
+        fprintf(stderr, "usage: pub <register_pipe_name> <box_name>\n");
         return EXIT_FAILURE;
     }
 
@@ -47,15 +47,16 @@ int main(int argc, char **argv) {
     }
 
     packet_t register_packet;
+    registration_data_t registration_data;
     printf("Registering publisher...\n");
     printf("Publisher name: %s\n", clientPipeName);
     printf("Box name: %s\n", boxName);
 
     register_packet.opcode = REGISTER_PUBLISHER;
-    memcpy(register_packet.client_pipe, clientPipeName,
+    memcpy(registration_data.client_pipe, clientPipeName,
            strlen(clientPipeName) + 1);
-    memcpy(register_packet.box_name, boxName, strlen(boxName) + 1);
-    memset(register_packet.message, 0, MESSAGE_SIZE);
+    memcpy(registration_data.box_name, boxName, strlen(boxName) + 1);
+    register_packet.payload.registration_data = registration_data;
 
     // Create pipe (and delete first if it exists)
     if (unlink(clientPipeName) != 0 && errno != ENOENT) {
@@ -89,9 +90,10 @@ int main(int argc, char **argv) {
         }
 
         packet_t packet;
+        message_data_t message_data;
         packet.opcode = PUBLISH_MESSAGE;
-        memcpy(packet.box_name, boxName, strlen(boxName) + 1);
-        memcpy(packet.message, buffer, strlen(buffer) + 1);
+        memcpy(message_data.message, buffer, strlen(buffer) + 1);
+        packet.payload.message_data = message_data;
 
         if (write(clientPipe, &packet, sizeof(packet_t)) < 0) {
             perror("Failed to write to pipe");
