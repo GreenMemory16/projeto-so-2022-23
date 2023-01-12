@@ -6,6 +6,7 @@
 #include "unistd.h"
 #include "utils.h"
 #include <fcntl.h>
+#include <semaphore.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +19,8 @@ static int registerPipe;
 static char *registerPipeName;
 static size_t maxSessions;
 static worker_t *workers;
+static sem_t hasNewMessage;
+static pc_queue_t queue;
 
 ssize_t try_read(int fd, void *buf, size_t count) {
     ssize_t bytes_read;
@@ -30,15 +33,27 @@ ssize_t try_read(int fd, void *buf, size_t count) {
 void *session_worker(void *args) {
     worker_t *worker = (worker_t *)args;
     while (true) {
-        pthread_mutex_lock(&worker->lock);
-        while (worker->packet.opcode == 0) {
-            pthread_cond_wait(&worker->cond, &worker->lock);
-        }
+        sem_wait(&hasNewMessage);
+        printf("Thread Reading command 0\n");
+        packet_t packet = *(packet_t *)pcq_dequeue(&queue);
+        // pthread_mutex_lock(&worker->lock);
+        // while (worker->packet.opcode == 0) {
+        //     pthread_cond_wait(&worker->cond, &worker->lock);
+        // }
 
-        switch (worker->packet.opcode) {
+        switch (packet.opcode) {
         case REGISTER_PUBLISHER: {
-            // parse_register_publisher(op_code);
-            printf("Thread Reading command 1\n");
+            printf("Registering Publisher\n");
+            char *pipeName = packet.client_pipe;
+
+            // open client pipe
+            int pipe = open(pipeName, O_RDONLY);
+
+            // wait for new message
+            packet_t new_packet;
+            while (try_read(pipe, &new_packet, sizeof(packet_t)) > 0) {
+                printf("Reading %s\n", new_packet.message);
+            }
             break;
         }
         case REGISTER_SUBSCRIBER: {
@@ -102,7 +117,6 @@ void close_server(int status) {
 }
 
 int main(int argc, char **argv) {
-
     if (argc < 2) {
         printf("Failed: Couldn't start server\n");
         return EXIT_FAILURE;
@@ -117,8 +131,14 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    pc_queue_t queue;
+    // create queue
     pcq_create(&queue, maxSessions);
+
+    // initialize semaphore
+    if (sem_init(&hasNewMessage, 0, 0) != 0) {
+        perror("Failed to initialize semaphore\n");
+        exit(EXIT_FAILURE);
+    }
 
     // start TFS filesystem
     if (tfs_init(NULL) != 0) {
@@ -158,46 +178,12 @@ int main(int argc, char **argv) {
             close_server(EXIT_FAILURE);
         }
 
-        int op_code;
         packet_t packet;
-
-        while (try_read(registerPipe, &op_code, sizeof(int)) > 0) {
-            switch (op_code) {
-            case REGISTER_PUBLISHER: {
-                // parse_register_publisher(op_code);
-                try_read(registerPipe, &packet, sizeof(packet_t));
-                printf("%s\n", packet.client_pipe);
-                printf("%s\n", packet.box_name);
-                printf("%d\n", packet.opcode);
-                printf("%s\n", packet.message);
-                printf("Reading command 1\n");
-                break;
-            }
-            case REGISTER_SUBSCRIBER: {
-                printf("Reading command 2\n");
-                break;
-            }
-            case CREATE_MAILBOX: {
-                printf("Reading command 3\n");
-                break;
-            }
-            case REMOVE_MAILBOX: {
-                printf("Reading command 5\n");
-                break;
-            }
-            case LIST_MAILBOXES: {
-                printf("Reading command 7\n");
-                break;
-            }
-            default: {
-                break;
-            }
-            }
+        while (try_read(registerPipe, &packet, sizeof(packet_t)) > 0) {
+            pcq_enqueue(&queue, &packet);
+            printf("Reading command 0\n");
+            sem_post(&hasNewMessage);
         }
-        // if (bytes_read < 0) {
-        //     perror("Failed to read from pipe\n");
-        //     close_server(EXIT_FAILURE);
-        // }
     }
 
     return -1;

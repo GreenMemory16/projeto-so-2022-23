@@ -28,7 +28,6 @@ typedef struct packet_t {
 } packet_t;
 
 typedef struct worker_t {
-    // what else
     packet_t packet;
     pthread_t thread;
     pthread_mutex_t lock;
