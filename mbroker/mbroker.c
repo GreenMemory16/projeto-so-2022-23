@@ -34,7 +34,6 @@ void *session_worker(void *args) {
     worker_t *worker = (worker_t *)args;
     while (true) {
         sem_wait(&hasNewMessage);
-        printf("Thread Reading command 0\n");
         packet_t packet = *(packet_t *)pcq_dequeue(&queue);
         // pthread_mutex_lock(&worker->lock);
         // while (worker->packet.opcode == 0) {
@@ -50,19 +49,95 @@ void *session_worker(void *args) {
             // open client pipe
             int pipe = open(pipeName, O_RDONLY);
 
+            // open TFS box
+            int box = tfs_open(payload.box_name, TFS_O_EXISTS);
+            if (box == -1) {
+                fprintf(stderr, "Failed to open box\n");
+
+            }
+
             // wait for new message
             packet_t new_packet;
             while (try_read(pipe, &new_packet, sizeof(packet_t)) > 0) {
+                // make non-utilized characters null
+                size_t message_size =
+                    strlen(new_packet.payload.message_data.message);
+                if (tfs_write(box, new_packet.payload.message_data.message,
+                              message_size) == -1) {
+                    fprintf(stderr, "Failed to write to box\n");
+                }
                 printf("Reading %s\n", new_packet.payload.message_data.message);
             }
             break;
         }
         case REGISTER_SUBSCRIBER: {
             printf("Thread Reading command 2\n");
+            registration_data_t payload = packet.payload.registration_data;
+            char *pipeName = payload.client_pipe;
+
+            printf("%s\n", pipeName);
+
+            // packet_t new_packet;
+            // new_packet.opcode = SEND_MESSAGE;
+
+            // open client pipe
+            // int pipe = open(pipeName, O_WRONLY);
+
+            // open TFS box
+            printf("Opening box %s", payload.box_name);
+            int box = tfs_open(payload.box_name, 0);
+            printf("Box: %d", box);
+
+            // get all messages from box
+            char buffer[MESSAGE_SIZE];
+            while (tfs_read(box, buffer, MESSAGE_SIZE) > 0) {
+                printf("Reading %s\n", buffer);
+                // if (write(pipe, &packet, sizeof(packet_t)) < 0) {
+                //     perror("Failed to write to pipe");
+                // }
+            }
+
+            // TODO: send every message written to box until now
+            // packet_t new_packet;
+
+            // listen for new messages by publisher
+
             break;
         }
         case CREATE_MAILBOX: {
-            printf("Thread Reading command 3\n");
+            printf("Creating Mailbox\n");
+
+            registration_data_t payload = packet.payload.registration_data;
+            char *pipeName = payload.client_pipe;
+
+            int pipe = open(pipeName, O_WRONLY);
+
+            int box = tfs_open(payload.box_name, TFS_O_EXISTS);
+            
+            char *message;
+            packet_t new_packet;
+            new_packet.opcode = CREATE_MAILBOX_ANSWER;
+
+            if (box == -1) {
+                // Box already exists
+                // Sends "ERROR" message to manager
+                message = "ERROR: box already exists\n";
+                new_packet.payload.answer_data.return_code = -1;
+                memcpy(new_packet.payload.answer_data.error_message,
+                    message, strlen(message)+1);
+
+                write(pipe, &new_packet, sizeof(packet_t));
+            }
+            
+            // Sends "OK" message to manager
+            new_packet.payload.answer_data.return_code = 0;
+
+            // Creates Mailbox
+            int box = tfs_open(payload.box_name, TFS_O_CREAT);
+            if (box == -1) {
+                fprintf(stderr, "Failed to create box\n");
+            }
+
             break;
         }
         case REMOVE_MAILBOX: {
@@ -182,7 +257,6 @@ int main(int argc, char **argv) {
         packet_t packet;
         while (try_read(registerPipe, &packet, sizeof(packet_t)) > 0) {
             pcq_enqueue(&queue, &packet);
-            printf("Reading command 0\n");
             sem_post(&hasNewMessage);
         }
     }

@@ -39,6 +39,7 @@ typedef enum {
     TFS_O_CREAT = 0b001,
     TFS_O_TRUNC = 0b010,
     TFS_O_APPEND = 0b100,
+    TFS_O_EXISTS = 0b1000,
 } tfs_file_mode_t;
 
 /**

@@ -76,6 +76,25 @@ static int tfs_lookup(char const *name, inode_t const *root_inode) {
     return find_in_dir(root_inode, name);
 }
 
+int tfs_file_exists(char *path) {
+    if (pthread_mutex_lock(&g_library_mutex) == -1) {
+        WARN("failed to lock mutex: %s", strerror(errno));
+        return -1;
+    }
+
+    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
+    ALWAYS_ASSERT(root_dir_inode != NULL,
+                  "tfs_file_exists: root dir inode must exist");
+    int inum = tfs_lookup(path, root_dir_inode);
+
+    if (pthread_mutex_unlock(&g_library_mutex) == -1) {
+        WARN("failed to unlock mutex: %s", strerror(errno));
+        return -1;
+    }
+
+    return inum;   
+}
+
 int tfs_open(char const *name, tfs_file_mode_t mode) {
     if (pthread_mutex_lock(&g_library_mutex) == -1) {
         WARN("failed to lock mutex: %s", strerror(errno));
@@ -138,6 +157,14 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         }
 
         offset = 0;
+    } else if (mode & TFS_O_EXISTS) {
+        // The file does not exist; the mode specified that it should not be
+        // created
+        if (pthread_mutex_unlock(&g_library_mutex) == -1) {
+            WARN("failed to unlock mutex: %s", strerror(errno));
+            return -1;
+        }
+        return -1;
     } else {
         if (pthread_mutex_unlock(&g_library_mutex) == -1) {
             WARN("failed to unlock mutex: %s", strerror(errno));
