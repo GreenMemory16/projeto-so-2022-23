@@ -89,7 +89,7 @@ void *session_worker(void *args) {
                               message_size) == -1) {
                     fprintf(stderr, "Failed to write to box\n");
                 }
-                printf("Reading %s\n", new_packet.payload.message_data.message);
+                printf("Writing %s\n", new_packet.payload.message_data.message);
             }
 
             // decrement box publisher
@@ -98,7 +98,7 @@ void *session_worker(void *args) {
             break;
         }
         case REGISTER_SUBSCRIBER: {
-            printf("Thread Reading command 2\n");
+            printf("Registering subscriber\n");
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
@@ -111,30 +111,38 @@ void *session_worker(void *args) {
             // int pipe = open(pipeName, O_WRONLY);
 
             // increment box subscribers
-            int index = search_array(payload.box_name);
-            file_list[index].n_subscribers++;
+            // int index = search_array(payload.box_name);
+            // file_list[index].n_subscribers++;
 
             // open TFS box
-            printf("Opening box %s", payload.box_name);
+            printf("Opening box %s\n", payload.box_name);
             int box = tfs_open(payload.box_name, TFS_O_EXISTS);
-            printf("Box: %d", box);
+            printf("Box: %d\n", box);
+
+            // open pipe
+            int pipe = open(pipeName, O_WRONLY);
 
             // get all messages from box
             char buffer[MESSAGE_SIZE];
             while (tfs_read(box, buffer, MESSAGE_SIZE) > 0) {
                 printf("Reading %s\n", buffer);
-                // if (write(pipe, &packet, sizeof(packet_t)) < 0) {
-                //     perror("Failed to write to pipe");
-                // }
-            }
+                packet_t new_packet;
+                message_data_t message_payload;
+                new_packet.opcode = SEND_MESSAGE;
+                strcpy(message_payload.message, buffer);
+                new_packet.payload.message_data = message_payload;
 
-            // TODO: send every message written to box until now
-            // packet_t new_packet;
+                // write to client pipe
+                if (write(pipe, &new_packet, sizeof(packet_t)) < 0) {
+                    perror("Failed to write to pipe");
+                }
+            }
 
             // listen for new messages by publisher
 
+            close(pipe);
             // decrement box subscribers
-            file_list[index].n_subscribers--;
+            // file_list[index].n_subscribers--;
 
             break;
         }
@@ -170,7 +178,6 @@ void *session_worker(void *args) {
 
             tfs_close(box);
 
-            // close pipe
             close(pipe);
 
             break;
@@ -244,6 +251,8 @@ void *session_worker(void *args) {
             break;
         }
         }
+
+        printf("Exiting thread\n");
 
         pthread_mutex_unlock(&worker->lock);
     }

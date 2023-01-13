@@ -23,7 +23,7 @@ static void print_usage() {
 }
 
 void close_manager() {
-    printf("Closing subscriber...\n");
+    printf("Closing manager...\n");
     // TODO: error handling
     close(registerPipe);
     close(clientPipe);

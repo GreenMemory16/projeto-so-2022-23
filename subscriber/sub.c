@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
         }
 
         packet_t packet;
-        if (read(clientPipe, &packet, sizeof(packet_t)) < 0) {
+        if (read(clientPipe, &packet, sizeof(packet_t)) <= 0) {
             perror("Failed to read from client pipe");
             return EXIT_FAILURE;
         }
