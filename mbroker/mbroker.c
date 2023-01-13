@@ -22,6 +22,15 @@ static size_t maxSessions;
 static worker_t *workers;
 static sem_t hasNewMessage;
 static pc_queue_t queue;
+static int tfs_index = 0;
+static tfs_file file_list[MAX_FILES];
+
+const tfs_params params = {
+    .max_inode_count = 64,
+    .max_block_count = 1024,
+    .max_open_files_count = MAX_FILES,
+    .block_size = 1024,
+};
 
 ssize_t try_read(int fd, void *buf, size_t count) {
     ssize_t bytes_read;
@@ -29,6 +38,16 @@ ssize_t try_read(int fd, void *buf, size_t count) {
         bytes_read = read(fd, buf, count);
     } while (bytes_read < 0 && errno == EINTR);
     return bytes_read;
+}
+
+int search_array(char *box_name) {
+    for (int i = 0; i <= tfs_index; i++) {
+        if (strcmp(box_name, file_list->box_name) == 0) {
+            return i;
+        }
+    }
+
+    return 0;
 }
 
 void *session_worker(void *args) {
@@ -50,6 +69,10 @@ void *session_worker(void *args) {
             // open client pipe
             int pipe = open(pipeName, O_RDONLY);
 
+            // increment box publisher
+            int index = search_array(payload.box_name);
+            file_list[index].n_publishers++;
+
             // open TFS box
             int box = tfs_open(payload.box_name, TFS_O_EXISTS);
             if (box == -1) {
@@ -68,6 +91,10 @@ void *session_worker(void *args) {
                 }
                 printf("Reading %s\n", new_packet.payload.message_data.message);
             }
+
+            // decrement box publisher
+            file_list[index].n_publishers--;
+
             break;
         }
         case REGISTER_SUBSCRIBER: {
@@ -83,9 +110,13 @@ void *session_worker(void *args) {
             // open client pipe
             // int pipe = open(pipeName, O_WRONLY);
 
+            // increment box subscribers
+            int index = search_array(payload.box_name);
+            file_list[index].n_subscribers++;
+
             // open TFS box
             printf("Opening box %s", payload.box_name);
-            int box = tfs_open(payload.box_name, 0);
+            int box = tfs_open(payload.box_name, TFS_O_EXISTS);
             printf("Box: %d", box);
 
             // get all messages from box
@@ -102,6 +133,9 @@ void *session_worker(void *args) {
 
             // listen for new messages by publisher
 
+            // decrement box subscribers
+            file_list[index].n_subscribers--;
+
             break;
         }
         case CREATE_MAILBOX: {
@@ -112,26 +146,21 @@ void *session_worker(void *args) {
 
             int pipe = open(pipeName, O_WRONLY);
 
-            // int box = tfs_open(payload.box_name, TFS_O_EXISTS);
-
-            // char *message;
             packet_t new_packet;
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
-
-            // if (box == -1) {
-            //     // Box already exists
-            //     // Sends "ERROR" message to manager
-            //     message = "ERROR: box already exists\n";
-            //     new_packet.payload.answer_data.return_code = -1;
-            //     memcpy(new_packet.payload.answer_data.error_message,
-            //         message, strlen(message)+1);
-
-            //     write(pipe, &new_packet, sizeof(packet_t));
-            // }
 
             // Sends "OK" message to manager
             new_packet.payload.answer_data.return_code = 0;
             write(pipe, &new_packet, sizeof(packet_t));
+
+            // Creates the file entry in array
+            tfs_file file_entry;
+            strcpy(file_entry.box_name, payload.box_name);
+            file_entry.n_publishers = 0;
+            file_entry.n_subscribers = 0;
+
+            file_list[tfs_index] = file_entry;
+            tfs_index++;
 
             // Creates Mailbox
             int box = tfs_open(payload.box_name, TFS_O_CREAT);
@@ -139,14 +168,76 @@ void *session_worker(void *args) {
                 fprintf(stderr, "Failed to create box\n");
             }
 
+            tfs_close(box);
+
+            // close pipe
+            close(pipe);
+
             break;
         }
         case REMOVE_MAILBOX: {
-            printf("Thread Reading command 5\n");
+            printf("Removing Mailbox\n");
+
+            registration_data_t payload = packet.payload.registration_data;
+            char *pipeName = payload.client_pipe;
+
+            int pipe = open(pipeName, O_WRONLY);
+
+            packet_t new_packet;
+            new_packet.opcode = CREATE_MAILBOX_ANSWER;
+
+            // Sends "OK" message to manager
+            new_packet.payload.answer_data.return_code = 0;
+            write(pipe, &new_packet, sizeof(packet_t));
+
+            // Deletes Mailbox
+            if (tfs_unlink(payload.box_name) == -1) {
+                fprintf(stderr, "Failed to delete box\n");
+            }
+
+            // removes tfs_file from tfs_list
+            
+
+            close(pipe);
+
             break;
         }
         case LIST_MAILBOXES: {
-            printf("Thread Reading command 7\n");
+            printf("Listing Mailboxes\n");
+            list_box_data_t payload = packet.payload.list_box_data;
+            char *pipeName = payload.client_pipe;
+
+            int pipe = open(pipeName, O_WRONLY);
+
+            packet_t new_packet;
+            new_packet.opcode = LIST_MAILBOXES_ANSWER;
+
+            if (tfs_index == 0) {
+                new_packet.payload.mailbox_data.last = 1;
+                memset(new_packet.payload.mailbox_data.box_name, 0,
+                       sizeof(new_packet.payload.mailbox_data.box_name));
+                write(pipe, &new_packet, sizeof(packet_t));
+            } else {
+                // Send message for each mailbox
+                for (int i = 0; i < tfs_index; i++) {
+                    strcpy(new_packet.payload.mailbox_data.box_name,
+                           file_list[i].box_name);
+                    new_packet.payload.mailbox_data.n_publishers =
+                        file_list[i].n_publishers;
+                    new_packet.payload.mailbox_data.n_subscribers =
+                        file_list[i].n_subscribers;
+                    new_packet.payload.mailbox_data.last =
+                        (i == tfs_index ? 1 : 0);
+
+                    new_packet.payload.mailbox_data.box_size = 0;
+                    //) TODO: get size of box
+                    // tfs_getsize(file_list[i].box_name);
+
+                    write(pipe, &new_packet, sizeof(packet_t));
+                }
+            }
+
+            close(pipe);
             break;
         }
         default: {
@@ -219,7 +310,7 @@ int main(int argc, char **argv) {
     }
 
     // start TFS filesystem
-    if (tfs_init(NULL) != 0) {
+    if (tfs_init(&params) != 0) {
         printf("Failed to init tfs\n");
         return EXIT_FAILURE;
     }

@@ -7,6 +7,7 @@
 #define PIPE_NAME_SIZE 256
 #define BOX_NAME_SIZE 32
 #define MESSAGE_SIZE 1024
+#define MAX_FILES 2048
 
 enum packet_opcode_t {
     REGISTER_PUBLISHER = 1,
@@ -64,5 +65,11 @@ typedef struct worker_t {
     pthread_mutex_t lock;
     pthread_cond_t cond;
 } worker_t;
+
+typedef struct tfs_file {
+    char box_name[BOX_NAME_SIZE + 1];
+    uint64_t n_publishers;
+    uint64_t n_subscribers;
+} tfs_file;
 
 #endif
