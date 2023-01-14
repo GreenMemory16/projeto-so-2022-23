@@ -70,6 +70,7 @@ typedef struct tfs_file {
     char box_name[BOX_NAME_SIZE + 1];
     uint64_t n_publishers;
     uint64_t n_subscribers;
+    uint64_t box_size;
 } tfs_file;
 
 typedef struct ListNode {

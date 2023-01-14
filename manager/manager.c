@@ -8,11 +8,13 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "list.h"
 
 static char *registerPipeName;
 static int registerPipe;
 static char *clientPipeName;
 static int clientPipe;
+static List list;
 
 static void print_usage() {
     fprintf(stderr,
@@ -164,6 +166,8 @@ int listBoxes() {
 
     create_client_pipe();
 
+    list_init(&list);
+
     // read from client pipe
     packet_t response;
     while (read(clientPipe, &response, sizeof(packet_t)) > 0) {
@@ -174,13 +178,24 @@ int listBoxes() {
             break;
         }
 
-        fprintf(stdout, "%s %zu %zu %zu\n", data.box_name, data.box_size,
-                data.n_publishers, data.n_subscribers);
+        tfs_file new_file;
+        strcpy(new_file.box_name, data.box_name);
+        new_file.n_subscribers = data.n_subscribers;
+        new_file.n_publishers = data.n_publishers;
+
+        list_add(&list, new_file);
+
         if (data.last == 1) {
             printf("Last Box reached\n");
             break;
         }
     }
+
+    list_sort(&list);
+
+    list_print(&list);
+
+    list_destroy(&list);
 
     close_manager();
     return 0;

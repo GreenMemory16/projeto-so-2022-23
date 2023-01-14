@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "protocol.h"
 
@@ -52,5 +53,29 @@ void list_print(List* list) {
 	while (node != NULL) {
 		printf("box_name: %s, n_publishers: %lu, n_subscribers: %lu\n", node->file.box_name, node->file.n_publishers, node->file.n_subscribers);
 		node = node->next;
+	}
+}
+
+void list_sort(List* list) {
+	ListNode *node, *next, *prev;
+	int ended = false;
+
+	while (!ended) {
+		ended = true;
+		for (prev = NULL, node = list->head; node != NULL;
+			 prev = node, node = next) {
+			next = node->next;
+			if (next != NULL && strcmp(node->file.box_name, next->file.box_name) > 0) {
+				ended = false;
+				node->next = next->next;
+
+				next->next = node;
+				if (prev == NULL)
+					list->head = next;
+				else
+					prev->next = next;
+				if (next == list->tail) list->tail = node;
+			}
+		}
 	}
 }

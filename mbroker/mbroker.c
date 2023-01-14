@@ -24,6 +24,7 @@ static worker_t *workers;
 static sem_t hasNewMessage;
 static pc_queue_t queue;
 static List list;
+static int n_boxes;
 
 const tfs_params params = {
     .max_inode_count = 64,
@@ -207,6 +208,8 @@ void *session_worker(void *args) {
             new_file.n_subscribers = 0;
             list_add(&list, new_file);
 
+            n_boxes++;
+
             tfs_close(box);
             close(pipe);
 
@@ -240,6 +243,8 @@ void *session_worker(void *args) {
                 list_remove(&list, NULL, list.head);
             }
 
+            n_boxes--;
+
             close(pipe);
 
             break;
@@ -251,8 +256,33 @@ void *session_worker(void *args) {
 
             int pipe = open(pipeName, O_WRONLY);
 
-            // DUMMY LIST MAILBOXES PRINT
-            list_print(&list);
+            packet_t new_packet;
+            new_packet.opcode = LIST_MAILBOXES_ANSWER;
+
+            if (n_boxes == 0) {
+                new_packet.payload.mailbox_data.last = 1;
+                memset(new_packet.payload.mailbox_data.box_name, 0, 
+                    sizeof(new_packet.payload.mailbox_data.box_name));
+                write(pipe, &new_packet, sizeof(packet_t));
+            } else {
+                // Send message for each mailbox
+                ListNode *node = list.head;
+                while (node->next != NULL) {
+                    strcpy(new_packet.payload.mailbox_data.box_name, 
+                        node->file.box_name);
+                    new_packet.payload.mailbox_data.n_publishers = 
+                        node->file.n_publishers;
+                    new_packet.payload.mailbox_data.n_subscribers = 
+                        node->file.n_subscribers;
+                    new_packet.payload.mailbox_data.last = 0;
+                    write(pipe, &new_packet, sizeof(packet_t));
+                    node = node->next;
+                }
+                new_packet.payload.mailbox_data.last = 1;
+                strcpy(new_packet.payload.mailbox_data.box_name, 
+                    node->file.box_name);
+                write(pipe, &new_packet, sizeof(packet_t));
+            }
 
             //packet_t new_packet;
             //new_packet.opcode = LIST_MAILBOXES_ANSWER;
