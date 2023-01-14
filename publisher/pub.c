@@ -67,16 +67,15 @@ int main(int argc, char **argv) {
     clientPipe = pipe_open(clientPipeName, O_WRONLY);
 
     // send new message for every new line until EOF is reached
-    char buffer[MESSAGE_SIZE + 1];
-    while (fgets(buffer, MESSAGE_SIZE + 1, stdin) != NULL) {
+    char buffer[MESSAGE_SIZE];
+    while (fgets(buffer, MESSAGE_SIZE, stdin) != NULL) {
         INFO("Sending message: %s", buffer);
         packet_t packet;
         message_data_t message_data;
         packet.opcode = PUBLISH_MESSAGE;
-        memset(message_data.message, 0, MESSAGE_SIZE + 1);
-        // copy the message to the message_data struct and remove the newline
-        // character
-        memcpy(message_data.message, buffer, strlen(buffer) - 1);
+        memset(message_data.message, 0, MESSAGE_SIZE);
+        // copy the message and remove the newline character
+        memcpy(message_data.message, buffer, strcspn(buffer, "\n"));
         packet.payload.message_data = message_data;
 
         pipe_write(clientPipe, &packet);

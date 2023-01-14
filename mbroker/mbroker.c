@@ -10,7 +10,6 @@
 #include <semaphore.h>
 #include <signal.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -80,15 +79,11 @@ void *session_worker(void *args) {
             }
 
             // wait for new message and write to box
-            // messages are separated by \0 characters
             packet_t new_packet;
+            char *message;
             while (try_read(pipe, &new_packet, sizeof(packet_t)) > 0) {
-                // make non-utilized characters null
-                size_t message_size =
-                    strlen(new_packet.payload.message_data.message);
-                INFO("Message size: %ld", message_size);
-                if (tfs_write(box, new_packet.payload.message_data.message,
-                              message_size + 1) == -1) {
+                message = new_packet.payload.message_data.message;
+                if (tfs_write(box, message, strlen(message) + 1) == -1) {
                     fprintf(stderr, "Failed to write to box\n");
                 }
                 printf("Writing %s\n", new_packet.payload.message_data.message);
@@ -121,16 +116,19 @@ void *session_worker(void *args) {
             }
 
             // send messages to subscriber
-            // messages are separated by \0 characters
             char buffer[MESSAGE_SIZE];
+            memset(buffer, 0, MESSAGE_SIZE);
+            char *message = buffer;
             packet_t new_packet;
             new_packet.opcode = SEND_MESSAGE;
-            while (tfs_read(box, buffer, MESSAGE_SIZE) > 0) {
-                // send each message separately
-                message_data_t message_payload;
-                strcpy(message_payload.message, buffer);
-                new_packet.payload.message_data = message_payload;
+            tfs_read(box, buffer, MESSAGE_SIZE);
+            while (strlen(message) > 0) {
+                printf("Sending %s\n", message);
+                memset(new_packet.payload.message_data.message, 0,
+                       MESSAGE_SIZE);
+                strcpy(new_packet.payload.message_data.message, message);
                 pipe_write(pipe, &new_packet);
+                message += strlen(message) + 1;
             }
 
             // TODO: listen for new messages by publisher

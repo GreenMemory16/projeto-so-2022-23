@@ -23,29 +23,29 @@ enum packet_opcode_t {
 };
 
 typedef struct registration_data_t {
-    char client_pipe[PIPE_NAME_SIZE + 1];
-    char box_name[BOX_NAME_SIZE + 1];
+    char client_pipe[PIPE_NAME_SIZE];
+    char box_name[BOX_NAME_SIZE];
 } registration_data_t;
 
 typedef struct answer_data_t {
     int32_t return_code;
-    char error_message[MESSAGE_SIZE + 1];
+    char error_message[MESSAGE_SIZE];
 } answer_data_t;
 
 typedef struct list_box_data_t {
-    char client_pipe[PIPE_NAME_SIZE + 1];
+    char client_pipe[PIPE_NAME_SIZE];
 } list_box_data_t;
 
 typedef struct mailbox_data_t {
     uint8_t last;
-    char box_name[BOX_NAME_SIZE + 1];
+    char box_name[BOX_NAME_SIZE];
     uint64_t box_size;
     uint64_t n_subscribers;
     uint64_t n_publishers;
 } mailbox_data_t;
 
 typedef struct message_data_t {
-    char message[MESSAGE_SIZE + 1];
+    char message[MESSAGE_SIZE];
 } message_data_t;
 
 typedef struct __attribute__((packed)) packet_t {
