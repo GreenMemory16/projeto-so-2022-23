@@ -1,3 +1,6 @@
+#ifndef __LIST_H__
+#define __LIST_H__
+
 #include "protocol.h"
 
 typedef struct ListNode {
@@ -15,4 +18,6 @@ void list_add(List *list, tfs_file file);
 void list_remove(List *list, ListNode *prev, ListNode *node);
 void list_destroy(List *list);
 void list_print(List *list);
-void list_sort(List *list)
+void list_sort(List *list);
+
+#endif
