@@ -56,10 +56,7 @@ int createBox(char *boxName) {
     registerPipe = pipe_open(registerPipeName, O_WRONLY);
 
     // write to register pipe
-    if (write(registerPipe, &packet, sizeof(packet_t)) == -1) {
-        fprintf(stderr, "Error writing to register pipe");
-        return EXIT_FAILURE;
-    }
+    pipe_write(registerPipe, &packet);
 
     clientPipe = pipe_open(clientPipeName, O_RDONLY);
 
@@ -87,10 +84,7 @@ int removeBox(char *boxName) {
     pipe_create(clientPipeName);
 
     registerPipe = pipe_open(registerPipeName, O_WRONLY);
-    if (write(registerPipe, &packet, sizeof(packet_t)) == -1) {
-        fprintf(stderr, "Error writing to register pipe");
-        return EXIT_FAILURE;
-    }
+    pipe_write(registerPipe, &packet);
 
     clientPipe = pipe_open(clientPipeName, O_RDONLY);
 

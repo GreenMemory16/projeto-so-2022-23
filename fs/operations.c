@@ -92,7 +92,7 @@ int tfs_file_exists(char *path) {
         return -1;
     }
 
-    return inum;   
+    return inum;
 }
 
 int tfs_open(char const *name, tfs_file_mode_t mode) {
@@ -157,14 +157,6 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         }
 
         offset = 0;
-    } else if (mode & TFS_O_EXISTS) {
-        // The file does not exist; the mode specified that it should not be
-        // created
-        if (pthread_mutex_unlock(&g_library_mutex) == -1) {
-            WARN("failed to unlock mutex: %s", strerror(errno));
-            return -1;
-        }
-        return -1;
     } else {
         if (pthread_mutex_unlock(&g_library_mutex) == -1) {
             WARN("failed to unlock mutex: %s", strerror(errno));

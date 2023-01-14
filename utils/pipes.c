@@ -5,6 +5,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "protocol.h"
+
 #define RETRY_COUNT 10
 
 void wait_retry() {
@@ -37,6 +39,18 @@ int pipe_open(char *pipeName, int mode) {
         wait_retry();
     }
     PANIC("Failed to open pipe");
+}
+
+void pipe_write(int pipe, packet_t *packet) {
+    int i;
+    for (i = 0; i < RETRY_COUNT; i++) {
+        if (write(pipe, packet, sizeof(packet_t)) >= 0) {
+            return;
+        }
+        WARN("Failed to write to pipe, retrying...");
+        wait_retry();
+    }
+    PANIC("Failed to write to pipe");
 }
 
 void pipe_close(int pipe) {

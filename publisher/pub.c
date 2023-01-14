@@ -58,10 +58,7 @@ int main(int argc, char **argv) {
 
     pipe_create(clientPipeName);
 
-    if (write(registerPipe, &register_packet, sizeof(packet_t)) < 0) {
-        perror("Failed to write to register pipe");
-        return EXIT_FAILURE;
-    }
+    pipe_write(registerPipe, &register_packet);
 
     printf("Publisher registered\n");
 
@@ -76,13 +73,13 @@ int main(int argc, char **argv) {
         packet_t packet;
         message_data_t message_data;
         packet.opcode = PUBLISH_MESSAGE;
-        strcpy(message_data.message, buffer);
+        memset(message_data.message, 0, MESSAGE_SIZE + 1);
+        // copy the message to the message_data struct and remove the newline
+        // character
+        memcpy(message_data.message, buffer, strlen(buffer) - 1);
         packet.payload.message_data = message_data;
 
-        if (write(clientPipe, &packet, sizeof(packet_t)) < 0) {
-            perror("Failed to write to pipe");
-            return EXIT_FAILURE;
-        }
+        pipe_write(clientPipe, &packet);
     }
 
     close_publisher();

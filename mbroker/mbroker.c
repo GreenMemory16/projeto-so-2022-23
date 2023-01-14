@@ -72,21 +72,23 @@ void *session_worker(void *args) {
             }
 
             // open TFS box
-            int box = tfs_open(formatBoxName(payload.box_name), TFS_O_EXISTS);
+            int box = tfs_open(formatBoxName(payload.box_name), TFS_O_APPEND);
             if (box == -1) {
                 WARN("Failed to open box\n");
                 pipe_close(pipe);
                 break;
             }
 
-            // wait for new message
+            // wait for new message and write to box
+            // messages are separated by \0 characters
             packet_t new_packet;
             while (try_read(pipe, &new_packet, sizeof(packet_t)) > 0) {
                 // make non-utilized characters null
                 size_t message_size =
                     strlen(new_packet.payload.message_data.message);
+                INFO("Message size: %ld", message_size);
                 if (tfs_write(box, new_packet.payload.message_data.message,
-                              message_size) == -1) {
+                              message_size + 1) == -1) {
                     fprintf(stderr, "Failed to write to box\n");
                 }
                 printf("Writing %s\n", new_packet.payload.message_data.message);
@@ -105,7 +107,7 @@ void *session_worker(void *args) {
             int pipe = pipe_open(pipeName, O_WRONLY);
 
             // open TFS box
-            int box = tfs_open(formatBoxName(payload.box_name), TFS_O_EXISTS);
+            int box = tfs_open(formatBoxName(payload.box_name), 0);
             if (box == -1) {
                 WARN("Failed to open box\n");
                 pipe_close(pipe);
@@ -118,20 +120,17 @@ void *session_worker(void *args) {
                 node->file.n_subscribers++;
             }
 
-            // get all messages from box
+            // send messages to subscriber
+            // messages are separated by \0 characters
             char buffer[MESSAGE_SIZE];
+            packet_t new_packet;
+            new_packet.opcode = SEND_MESSAGE;
             while (tfs_read(box, buffer, MESSAGE_SIZE) > 0) {
-                printf("Reading %s\n", buffer);
-                packet_t new_packet;
+                // send each message separately
                 message_data_t message_payload;
-                new_packet.opcode = SEND_MESSAGE;
                 strcpy(message_payload.message, buffer);
                 new_packet.payload.message_data = message_payload;
-
-                // write to client pipe
-                if (write(pipe, &new_packet, sizeof(packet_t)) < 0) {
-                    perror("Failed to write to pipe");
-                }
+                pipe_write(pipe, &new_packet);
             }
 
             // TODO: listen for new messages by publisher
@@ -161,7 +160,7 @@ void *session_worker(void *args) {
                 new_packet.payload.answer_data.return_code = -1;
                 strcpy(new_packet.payload.answer_data.error_message,
                        "Failed to create box");
-                write(pipe, &new_packet, sizeof(packet_t));
+                pipe_write(pipe, &new_packet);
                 pipe_close(pipe);
                 break;
             }
@@ -171,7 +170,7 @@ void *session_worker(void *args) {
                 new_packet.payload.answer_data.return_code = -1;
                 strcpy(new_packet.payload.answer_data.error_message,
                        "Box already exists");
-                write(pipe, &new_packet, sizeof(packet_t));
+                pipe_write(pipe, &new_packet);
                 pipe_close(pipe);
                 break;
             }
@@ -188,7 +187,7 @@ void *session_worker(void *args) {
 
             // Sends "OK" message to manager
             new_packet.payload.answer_data.return_code = 0;
-            write(pipe, &new_packet, sizeof(packet_t));
+            pipe_write(pipe, &new_packet);
 
             tfs_close(box);
             pipe_close(pipe);
@@ -212,7 +211,7 @@ void *session_worker(void *args) {
                 new_packet.payload.answer_data.return_code = -1;
                 strcpy(new_packet.payload.answer_data.error_message,
                        "Failed to delete box");
-                write(pipe, &new_packet, sizeof(packet_t));
+                pipe_write(pipe, &new_packet);
                 break;
             }
 
@@ -228,7 +227,7 @@ void *session_worker(void *args) {
 
             // Sends "OK" message to manager
             new_packet.payload.answer_data.return_code = 0;
-            write(pipe, &new_packet, sizeof(packet_t));
+            pipe_write(pipe, &new_packet);
 
             pipe_close(pipe);
 
@@ -248,7 +247,7 @@ void *session_worker(void *args) {
                 new_packet.payload.mailbox_data.last = 1;
                 memset(new_packet.payload.mailbox_data.box_name, 0,
                        sizeof(new_packet.payload.mailbox_data.box_name));
-                write(pipe, &new_packet, sizeof(packet_t));
+                pipe_write(pipe, &new_packet);
             } else {
                 // Send message for each mailbox
                 ListNode *node = list.head;
@@ -260,43 +259,14 @@ void *session_worker(void *args) {
                     new_packet.payload.mailbox_data.n_subscribers =
                         node->file.n_subscribers;
                     new_packet.payload.mailbox_data.last = 0;
-                    write(pipe, &new_packet, sizeof(packet_t));
+                    pipe_write(pipe, &new_packet);
                     node = node->next;
                 }
                 new_packet.payload.mailbox_data.last = 1;
                 strcpy(new_packet.payload.mailbox_data.box_name,
                        node->file.box_name);
-                write(pipe, &new_packet, sizeof(packet_t));
+                pipe_write(pipe, &new_packet);
             }
-
-            // packet_t new_packet;
-            // new_packet.opcode = LIST_MAILBOXES_ANSWER;
-            /*
-            if (tfs_index == 0) {
-                new_packet.payload.mailbox_data.last = 1;
-                memset(new_packet.payload.mailbox_data.box_name, 0,
-                       sizeof(new_packet.payload.mailbox_data.box_name));
-                write(pipe, &new_packet, sizeof(packet_t));
-            } else {
-                // Send message for each mailbox
-                for (int i = 0; i < tfs_index; i++) {
-                    strcpy(new_packet.payload.mailbox_data.box_name,
-                           file_list[i].box_name);
-                    new_packet.payload.mailbox_data.n_publishers =
-                        file_list[i].n_publishers;
-                    new_packet.payload.mailbox_data.n_subscribers =
-                        file_list[i].n_subscribers;
-                    new_packet.payload.mailbox_data.last =
-                        (i == tfs_index ? 1 : 0);
-
-                    new_packet.payload.mailbox_data.box_size = 0;
-                    //) TODO: get size of box
-                    // tfs_getsize(file_list[i].box_name);
-
-                    write(pipe, &new_packet, sizeof(packet_t));
-                }
-            }
-            */
 
             pipe_close(pipe);
             break;

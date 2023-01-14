@@ -58,10 +58,7 @@ int main(int argc, char **argv) {
 
     pipe_create(clientPipeName);
 
-    if (write(registerPipe, &register_packet, sizeof(packet_t)) < 0) {
-        perror("Failed to write to register pipe");
-        return EXIT_FAILURE;
-    }
+    pipe_write(registerPipe, &register_packet);
 
     printf("Subscriber registered!\n");
 
@@ -71,8 +68,14 @@ int main(int argc, char **argv) {
 
     while (true) {
         packet_t packet;
-        if (read(clientPipe, &packet, sizeof(packet_t)) <= 0) {
+        ssize_t bytesRead = read(clientPipe, &packet, sizeof(packet_t));
+        if (bytesRead < 0) {
             WARN("Failed to read from client pipe\n");
+            break;
+        }
+
+        if (bytesRead == 0) {
+            WARN("Client pipe closed\n");
             break;
         }
 
