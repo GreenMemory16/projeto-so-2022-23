@@ -183,14 +183,26 @@ void *session_worker(void *args) {
             packet_t new_packet;
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
 
-            // Sends "OK" message to manager
-            new_packet.payload.answer_data.return_code = 0;
-            write(pipe, &new_packet, sizeof(packet_t));
-
             // Creates Mailbox
             int box = tfs_open(payload.box_name, TFS_O_CREAT);
             if (box == -1) {
-                fprintf(stderr, "Failed to create box\n");
+                WARN("Failed to create box\n");
+                new_packet.payload.answer_data.return_code = -1;
+                strcpy(new_packet.payload.answer_data.error_message,
+                       "Failed to create box");
+                write(pipe, &new_packet, sizeof(packet_t));
+                close(pipe);
+                break;
+            }
+
+            if (list_find(&list, payload.box_name) != 0) {
+                WARN("Box already exists\n");
+                new_packet.payload.answer_data.return_code = -1;
+                strcpy(new_packet.payload.answer_data.error_message,
+                       "Box already exists");
+                write(pipe, &new_packet, sizeof(packet_t));
+                close(pipe);
+                break;
             }
 
             // adds file to the list
@@ -198,9 +210,14 @@ void *session_worker(void *args) {
             strcpy(new_file.box_name, payload.box_name);
             new_file.n_publishers = 0;
             new_file.n_subscribers = 0;
+
             list_add(&list, new_file);
 
             n_boxes++;
+
+            // Sends "OK" message to manager
+            new_packet.payload.answer_data.return_code = 0;
+            write(pipe, &new_packet, sizeof(packet_t));
 
             tfs_close(box);
             close(pipe);
@@ -253,26 +270,26 @@ void *session_worker(void *args) {
 
             if (n_boxes == 0) {
                 new_packet.payload.mailbox_data.last = 1;
-                memset(new_packet.payload.mailbox_data.box_name, 0, 
-                    sizeof(new_packet.payload.mailbox_data.box_name));
+                memset(new_packet.payload.mailbox_data.box_name, 0,
+                       sizeof(new_packet.payload.mailbox_data.box_name));
                 write(pipe, &new_packet, sizeof(packet_t));
             } else {
                 // Send message for each mailbox
                 ListNode *node = list.head;
                 while (node->next != NULL) {
-                    strcpy(new_packet.payload.mailbox_data.box_name, 
-                        node->file.box_name);
-                    new_packet.payload.mailbox_data.n_publishers = 
+                    strcpy(new_packet.payload.mailbox_data.box_name,
+                           node->file.box_name);
+                    new_packet.payload.mailbox_data.n_publishers =
                         node->file.n_publishers;
-                    new_packet.payload.mailbox_data.n_subscribers = 
+                    new_packet.payload.mailbox_data.n_subscribers =
                         node->file.n_subscribers;
                     new_packet.payload.mailbox_data.last = 0;
                     write(pipe, &new_packet, sizeof(packet_t));
                     node = node->next;
                 }
                 new_packet.payload.mailbox_data.last = 1;
-                strcpy(new_packet.payload.mailbox_data.box_name, 
-                    node->file.box_name);
+                strcpy(new_packet.payload.mailbox_data.box_name,
+                       node->file.box_name);
                 write(pipe, &new_packet, sizeof(packet_t));
             }
 

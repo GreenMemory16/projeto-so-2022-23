@@ -1,7 +1,7 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 
 #include "list.h"
 
@@ -22,6 +22,18 @@ void list_add(List *list, tfs_file file) {
         list->tail->next = node;
         list->tail = node;
     }
+}
+
+int list_find(List *list, char *box_name) {
+    ListNode *node = list->head;
+
+    while (node != NULL) {
+        if (strcmp(node->file.box_name, box_name) == 0) {
+            return 1;
+        }
+        node = node->next;
+    }
+    return 0;
 }
 
 void list_remove(List *list, ListNode *prev, ListNode *node) {
@@ -58,26 +70,28 @@ void list_print(List *list) {
     }
 }
 
-void list_sort(List* list) {
-	ListNode *node, *next, *prev;
-	int ended = false;
+void list_sort(List *list) {
+    ListNode *node, *next, *prev;
+    int ended = false;
 
-	while (!ended) {
-		ended = true;
-		for (prev = NULL, node = list->head; node != NULL;
-			 prev = node, node = next) {
-			next = node->next;
-			if (next != NULL && strcmp(node->file.box_name, next->file.box_name) > 0) {
-				ended = false;
-				node->next = next->next;
+    while (!ended) {
+        ended = true;
+        for (prev = NULL, node = list->head; node != NULL;
+             prev = node, node = next) {
+            next = node->next;
+            if (next != NULL &&
+                strcmp(node->file.box_name, next->file.box_name) > 0) {
+                ended = false;
+                node->next = next->next;
 
-				next->next = node;
-				if (prev == NULL)
-					list->head = next;
-				else
-					prev->next = next;
-				if (next == list->tail) list->tail = node;
-			}
-		}
-	}
+                next->next = node;
+                if (prev == NULL)
+                    list->head = next;
+                else
+                    prev->next = next;
+                if (next == list->tail)
+                    list->tail = node;
+            }
+        }
+    }
 }

@@ -1,3 +1,4 @@
+#include "list.h"
 #include "logging.h"
 #include "protocol.h"
 #include <errno.h>
@@ -8,7 +9,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "list.h"
 
 static char *registerPipeName;
 static int registerPipe;
@@ -33,11 +33,22 @@ char* remove_first_char(char *str) {
 }
 
 void close_manager() {
-    printf("Closing manager...\n");
+    INFO("Closing manager...");
     // TODO: error handling
     close(registerPipe);
     close(clientPipe);
     unlink(clientPipeName);
+}
+
+void handle_response(packet_t response) {
+    if (response.payload.answer_data.return_code == 0) {
+        fprintf(stdout, "OK\n");
+    } else if (response.payload.answer_data.return_code == -1) {
+        fprintf(stdout, "ERROR %s\n",
+                response.payload.answer_data.error_message);
+    } else {
+        PANIC("Unexpected response from server\n");
+    }
 }
 
 void create_client_pipe() {
@@ -53,7 +64,7 @@ void create_client_pipe() {
     }
 
     // open client pipe
-    printf("Opening client pipe %s\n", clientPipeName);
+    INFO("Opening client pipe %s", clientPipeName);
     clientPipe = open(clientPipeName, O_RDONLY);
     if (clientPipe == -1) {
         fprintf(stderr, "Error opening client pipe");
@@ -91,16 +102,7 @@ int createBox(char *boxName) {
         return EXIT_FAILURE;
     }
 
-    if (response.payload.answer_data.return_code == 0) {
-        printf("Mailbox %s created\n", boxName);
-    } else if (response.payload.answer_data.return_code == -1) {
-        printf("Error creating mailbox %s\n", boxName);
-        printf("Error message: %s\n",
-               response.payload.answer_data.error_message);
-    } else {
-        printf("Unexpected response from server\n");
-    }
-
+    handle_response(response);
     close_manager();
 
     return 0;
@@ -137,16 +139,7 @@ int removeBox(char *boxName) {
         return EXIT_FAILURE;
     }
 
-    if (response.payload.answer_data.return_code == 0) {
-        printf("Mailbox %s removed\n", boxName);
-    } else if (response.payload.answer_data.return_code == -1) {
-        printf("Error removing mailbox %s\n", boxName);
-        printf("Error message: %s\n",
-               response.payload.answer_data.error_message);
-    } else {
-        printf("Unexpected response from server\n");
-    }
-
+    handle_response(response);
     close_manager();
 
     return 0;
@@ -200,9 +193,7 @@ int listBoxes() {
     }
 
     list_sort(&list);
-
     list_print(&list);
-
     list_destroy(&list);
 
     close_manager();
