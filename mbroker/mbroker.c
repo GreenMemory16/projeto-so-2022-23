@@ -58,7 +58,7 @@ void *session_worker(void *args) {
 
         switch (packet.opcode) {
         case REGISTER_PUBLISHER: {
-            INFO("Registering Publisher\n");
+            INFO("Registering Publisher");
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
@@ -73,7 +73,7 @@ void *session_worker(void *args) {
             // open TFS box
             int box = tfs_open(formatBoxName(payload.box_name), TFS_O_APPEND);
             if (box == -1) {
-                WARN("Failed to open box\n");
+                WARN("Failed to open box");
                 pipe_close(pipe);
                 break;
             }
@@ -86,7 +86,7 @@ void *session_worker(void *args) {
                 if (tfs_write(box, message, strlen(message) + 1) == -1) {
                     fprintf(stderr, "Failed to write to box\n");
                 }
-                printf("Writing %s\n", new_packet.payload.message_data.message);
+                INFO("Writing %s", new_packet.payload.message_data.message);
             }
 
             // decrement box publisher
@@ -95,7 +95,7 @@ void *session_worker(void *args) {
             break;
         }
         case REGISTER_SUBSCRIBER: {
-            INFO("Registering subscriber\n");
+            INFO("Registering subscriber");
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
@@ -104,7 +104,7 @@ void *session_worker(void *args) {
             // open TFS box
             int box = tfs_open(formatBoxName(payload.box_name), 0);
             if (box == -1) {
-                WARN("Failed to open box\n");
+                WARN("Failed to open box");
                 pipe_close(pipe);
                 break;
             }
@@ -123,7 +123,7 @@ void *session_worker(void *args) {
             new_packet.opcode = SEND_MESSAGE;
             tfs_read(box, buffer, MESSAGE_SIZE);
             while (strlen(message) > 0) {
-                printf("Sending %s\n", message);
+                INFO("Sending %s", message);
                 memset(new_packet.payload.message_data.message, 0,
                        MESSAGE_SIZE);
                 strcpy(new_packet.payload.message_data.message, message);
@@ -141,7 +141,7 @@ void *session_worker(void *args) {
             break;
         }
         case CREATE_MAILBOX: {
-            INFO("Creating Mailbox\n");
+            INFO("Creating Mailbox");
 
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
@@ -154,7 +154,7 @@ void *session_worker(void *args) {
             // Creates Mailbox
             int box = tfs_open(formatBoxName(payload.box_name), TFS_O_CREAT);
             if (box == -1) {
-                WARN("Failed to create box\n");
+                WARN("Failed to create box");
                 new_packet.payload.answer_data.return_code = -1;
                 strcpy(new_packet.payload.answer_data.error_message,
                        "Failed to create box");
@@ -164,7 +164,7 @@ void *session_worker(void *args) {
             }
 
             if (list_find(&list, payload.box_name) != 0) {
-                WARN("Box already exists\n");
+                WARN("Box already exists");
                 new_packet.payload.answer_data.return_code = -1;
                 strcpy(new_packet.payload.answer_data.error_message,
                        "Box already exists");
@@ -193,7 +193,7 @@ void *session_worker(void *args) {
             break;
         }
         case REMOVE_MAILBOX: {
-            INFO("Removing Mailbox\n");
+            INFO("Removing Mailbox");
 
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
@@ -232,7 +232,7 @@ void *session_worker(void *args) {
             break;
         }
         case LIST_MAILBOXES: {
-            INFO("Listing Mailboxes\n");
+            INFO("Listing Mailboxes");
             list_box_data_t payload = packet.payload.list_box_data;
             char *pipeName = payload.client_pipe;
 

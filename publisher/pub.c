@@ -46,9 +46,8 @@ int main(int argc, char **argv) {
 
     packet_t register_packet;
     registration_data_t registration_data;
-    printf("Registering publisher...\n");
-    printf("Publisher name: %s\n", clientPipeName);
-    printf("Box name: %s\n", boxName);
+
+    INFO("Registering publisher");
 
     register_packet.opcode = REGISTER_PUBLISHER;
     memcpy(registration_data.client_pipe, clientPipeName,
@@ -60,16 +59,13 @@ int main(int argc, char **argv) {
 
     pipe_write(registerPipe, &register_packet);
 
-    printf("Publisher registered\n");
-
-    printf("Now waiting for user input:\n");
+    INFO("Waiting for user input");
 
     clientPipe = pipe_open(clientPipeName, O_WRONLY);
 
     // send new message for every new line until EOF is reached
     char buffer[MESSAGE_SIZE];
     while (fgets(buffer, MESSAGE_SIZE, stdin) != NULL) {
-        INFO("Sending message: %s", buffer);
         packet_t packet;
         message_data_t message_data;
         packet.opcode = PUBLISH_MESSAGE;
@@ -77,6 +73,8 @@ int main(int argc, char **argv) {
         // copy the message and remove the newline character
         memcpy(message_data.message, buffer, strcspn(buffer, "\n"));
         packet.payload.message_data = message_data;
+
+        INFO("Sending message: %s", packet.payload.message_data.message);
 
         pipe_write(clientPipe, &packet);
     }

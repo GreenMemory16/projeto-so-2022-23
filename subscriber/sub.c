@@ -21,7 +21,7 @@ static int messagesReceived;
 
 void close_subscriber() {
     printf("Received %d messages\n", messagesReceived);
-    INFO("Closing subscriber...\n");
+    INFO("Closing subscriber...");
     pipe_close(registerPipe);
     pipe_close(clientPipe);
     pipe_destroy(clientPipeName);
@@ -46,9 +46,8 @@ int main(int argc, char **argv) {
 
     packet_t register_packet;
     registration_data_t registration_data;
-    printf("Registering subscriber...\n");
-    printf("Subscriber name: %s\n", clientPipeName);
-    printf("Box name: %s\n", boxName);
+
+    INFO("Registering subscriber");
 
     register_packet.opcode = REGISTER_SUBSCRIBER;
     memcpy(registration_data.client_pipe, clientPipeName,
@@ -60,9 +59,7 @@ int main(int argc, char **argv) {
 
     pipe_write(registerPipe, &register_packet);
 
-    printf("Subscriber registered!\n");
-
-    printf("Now Listening for Publisher messages\n");
+    INFO("Listening for Publisher messages");
 
     clientPipe = pipe_open(clientPipeName, O_RDONLY);
 
@@ -70,17 +67,16 @@ int main(int argc, char **argv) {
         packet_t packet;
         ssize_t bytesRead = read(clientPipe, &packet, sizeof(packet_t));
         if (bytesRead < 0) {
-            WARN("Failed to read from client pipe\n");
+            WARN("Failed to read from client pipe");
             break;
         }
 
         if (bytesRead == 0) {
-            WARN("Client pipe closed\n");
+            WARN("Client pipe closed");
             break;
         }
 
-        printf("Reading from mailbox: %s\n",
-               packet.payload.message_data.message);
+        fprintf(stdout, "%s\n", packet.payload.message_data.message);
 
         messagesReceived++;
     }

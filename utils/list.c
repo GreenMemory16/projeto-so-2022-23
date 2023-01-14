@@ -69,9 +69,9 @@ void list_print(List *list) {
     ListNode *node = list->head;
 
     while (node != NULL) {
-        printf("box_name: %s, n_publishers: %lu, n_subscribers: %lu\n",
-               node->file.box_name, node->file.n_publishers,
-               node->file.n_subscribers);
+        fprintf(stdout, "%s %zu %zu %zu\n", node->file.box_name,
+                node->file.box_size, node->file.n_publishers,
+                node->file.n_subscribers);
         node = node->next;
     }
 }

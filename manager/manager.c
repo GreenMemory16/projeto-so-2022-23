@@ -135,7 +135,7 @@ int listBoxes() {
         list_add(&list, new_file);
 
         if (data.last == 1) {
-            INFO("Last Box reached\n");
+            INFO("Last Box reached");
             break;
         }
     }
