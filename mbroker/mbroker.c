@@ -228,13 +228,14 @@ void *session_worker(void *args) {
             packet_t new_packet;
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
 
-            // Sends "OK" message to manager
-            new_packet.payload.answer_data.return_code = 0;
-            write(pipe, &new_packet, sizeof(packet_t));
-
             // Deletes Mailbox
             if (tfs_unlink(payload.box_name) == -1) {
-                fprintf(stderr, "Failed to delete box\n");
+                WARN("Failed to delete box");
+                new_packet.payload.answer_data.return_code = -1;
+                strcpy(new_packet.payload.answer_data.error_message,
+                       "Failed to delete box");
+                write(pipe, &new_packet, sizeof(packet_t));
+                break;
             }
 
             // removes tfs_file from tfs_list
@@ -246,6 +247,10 @@ void *session_worker(void *args) {
             }
 
             n_boxes--;
+
+            // Sends "OK" message to manager
+            new_packet.payload.answer_data.return_code = 0;
+            write(pipe, &new_packet, sizeof(packet_t));
 
             pipe_close(pipe);
 
@@ -367,7 +372,7 @@ int main(int argc, char **argv) {
 
     registerPipeName = argv[1];
     maxSessions = strtoul(argv[2], NULL, 10);
-    printf("Starting server with pipe named %s\n", registerPipeName);
+    INFO("Starting server with pipe named %s", registerPipeName);
 
     if (start_server() != 0) {
         printf("Failed: Couldn't start server\n");
