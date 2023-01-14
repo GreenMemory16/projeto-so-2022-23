@@ -2,6 +2,7 @@
 #include "list.h"
 #include "logging.h"
 #include "operations.h"
+#include "pipes.h"
 #include "protocol.h"
 #include "pthread.h"
 #include "utils.h"
@@ -84,8 +85,7 @@ void *session_worker(void *args) {
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
-            // open client pipe
-            int pipe = open(pipeName, O_RDONLY);
+            int pipe = pipe_open(pipeName, O_RDONLY);
 
             // increment box publisher
             ListNode *node = search_node(payload.box_name);
@@ -97,7 +97,7 @@ void *session_worker(void *args) {
             int box = tfs_open(payload.box_name, TFS_O_EXISTS);
             if (box == -1) {
                 WARN("Failed to open box\n");
-                close(pipe);
+                pipe_close(pipe);
                 break;
             }
 
@@ -124,20 +124,13 @@ void *session_worker(void *args) {
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
-            // packet_t new_packet;
-            // new_packet.opcode = SEND_MESSAGE;
-
-            // open client pipe
-            // int pipe = open(pipeName, O_WRONLY);
-
-            // open client pipe
-            int pipe = open(pipeName, O_WRONLY);
+            int pipe = pipe_open(pipeName, O_WRONLY);
 
             // open TFS box
             int box = tfs_open(payload.box_name, TFS_O_EXISTS);
             if (box == -1) {
                 WARN("Failed to open box\n");
-                close(pipe);
+                pipe_close(pipe);
                 break;
             }
 
@@ -165,7 +158,7 @@ void *session_worker(void *args) {
 
             // TODO: listen for new messages by publisher
 
-            close(pipe);
+            pipe_close(pipe);
 
             // decrement box subscribers
             node->file.n_subscribers--;
@@ -178,7 +171,7 @@ void *session_worker(void *args) {
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
-            int pipe = open(pipeName, O_WRONLY);
+            int pipe = pipe_open(pipeName, O_WRONLY);
 
             packet_t new_packet;
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
@@ -191,7 +184,7 @@ void *session_worker(void *args) {
                 strcpy(new_packet.payload.answer_data.error_message,
                        "Failed to create box");
                 write(pipe, &new_packet, sizeof(packet_t));
-                close(pipe);
+                pipe_close(pipe);
                 break;
             }
 
@@ -201,7 +194,7 @@ void *session_worker(void *args) {
                 strcpy(new_packet.payload.answer_data.error_message,
                        "Box already exists");
                 write(pipe, &new_packet, sizeof(packet_t));
-                close(pipe);
+                pipe_close(pipe);
                 break;
             }
 
@@ -220,7 +213,7 @@ void *session_worker(void *args) {
             write(pipe, &new_packet, sizeof(packet_t));
 
             tfs_close(box);
-            close(pipe);
+            pipe_close(pipe);
 
             break;
         }
@@ -230,7 +223,7 @@ void *session_worker(void *args) {
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
-            int pipe = open(pipeName, O_WRONLY);
+            int pipe = pipe_open(pipeName, O_WRONLY);
 
             packet_t new_packet;
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
@@ -254,7 +247,7 @@ void *session_worker(void *args) {
 
             n_boxes--;
 
-            close(pipe);
+            pipe_close(pipe);
 
             break;
         }
@@ -263,7 +256,7 @@ void *session_worker(void *args) {
             list_box_data_t payload = packet.payload.list_box_data;
             char *pipeName = payload.client_pipe;
 
-            int pipe = open(pipeName, O_WRONLY);
+            int pipe = pipe_open(pipeName, O_WRONLY);
 
             packet_t new_packet;
             new_packet.opcode = LIST_MAILBOXES_ANSWER;
@@ -322,7 +315,7 @@ void *session_worker(void *args) {
             }
             */
 
-            close(pipe);
+            pipe_close(pipe);
             break;
         }
         default: {
@@ -355,25 +348,18 @@ int start_server() {
 }
 
 void close_server(int status) {
-    if (close(registerPipe) < 0) {
-        perror("Failed to close pipe\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (unlink(registerPipeName) != 0 && errno != ENOENT) {
-        perror("Failed to delete pipe");
-        exit(EXIT_FAILURE);
-    }
+    pipe_close(registerPipe);
+    pipe_destroy(registerPipeName);
 
     free(workers);
 
-    printf("\nSuccessfully ended the server.\n");
+    INFO("Successfully ended the server.");
     exit(status);
 }
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        printf("Failed: Couldn't start server\n");
+        fprintf(stderr, "usage: mbroker <pipename>\n");
         return EXIT_FAILURE;
     }
 
@@ -403,37 +389,12 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    if (unlink(registerPipeName) != 0 && errno != ENOENT) {
-        perror("Failed: Couldn't delete pipes\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (mkfifo(registerPipeName, 0640) != 0) {
-        perror("Failed: Couldn't create pipes\n");
-        exit(EXIT_FAILURE);
-    }
-
-    registerPipe = open(registerPipeName, O_RDONLY);
-    if (registerPipe < 0) {
-        perror("Fail: Couldn't open server pipe\n");
-        unlink(registerPipeName);
-        exit(EXIT_FAILURE);
-    }
+    pipe_create(registerPipeName);
+    registerPipe = pipe_open(registerPipeName, O_RDONLY);
 
     while (true) {
-        int tempPipe = open(registerPipeName, O_RDONLY);
-
-        if (tempPipe < 0) {
-            if (errno == ENOENT) {
-                return 0;
-            }
-            perror("Failed to open server pipe\n");
-            close_server(EXIT_FAILURE);
-        }
-        if (close(tempPipe) < 0) {
-            perror("Failed to close pipe\n");
-            close_server(EXIT_FAILURE);
-        }
+        int tempPipe = pipe_open(registerPipeName, O_RDONLY);
+        pipe_close(tempPipe);
 
         packet_t packet;
         while (try_read(registerPipe, &packet, sizeof(packet_t)) > 0) {
@@ -444,33 +405,3 @@ int main(int argc, char **argv) {
 
     return -1;
 }
-
-// void parse_register_publisher(int op_code) {
-//     char pipePath[PIPE_NAME_SIZE];
-//     char boxName[BOX_NAME_SIZE];
-
-//     // read pipe path
-//     ssize_t bytes_read = try_read(myPipe, pipePath, PIPE_NAME_SIZE);
-//     if (bytes_read < 0) {
-//         perror("Failed to read from pipe\n");
-//         close_server(EXIT_FAILURE);
-//     }
-
-//     // read box name
-//     bytes_read = try_read(myPipe, boxName, BOX_NAME_SIZE);
-//     if (bytes_read < 0) {
-//         perror("Failed to read from pipe\n");
-//         close_server(EXIT_FAILURE);
-//     }
-// }
-
-// void parse_list_mailboxes(int op_code) {
-//     char clientNamePipePath[PIPE_NAME_SIZE];
-
-//     // read pipe path
-//     ssize_t bytes_read = try_read(myPipe, clientNamePipePath,
-//     PIPE_NAME_SIZE); if (bytes_read < 0) {
-//         perror("Failed to read from pipe\n");
-//         close_server(EXIT_FAILURE);
-//     }
-// }

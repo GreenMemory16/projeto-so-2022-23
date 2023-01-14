@@ -1,5 +1,6 @@
 #include "logging.h"
 #include "operations.h"
+#include "pipes.h"
 #include "protocol.h"
 #include "unistd.h"
 #include "utils.h"
@@ -20,11 +21,10 @@ static int messagesReceived;
 
 void close_subscriber() {
     printf("Received %d messages\n", messagesReceived);
-    printf("Closing subscriber...\n");
-    // TODO: error handling
-    close(registerPipe);
-    close(clientPipe);
-    unlink(clientPipeName);
+    INFO("Closing subscriber...\n");
+    pipe_close(registerPipe);
+    pipe_close(clientPipe);
+    pipe_destroy(clientPipeName);
 }
 
 int main(int argc, char **argv) {
@@ -42,11 +42,7 @@ int main(int argc, char **argv) {
     clientPipeName = argv[2];
     boxName = argv[3];
 
-    registerPipe = open(registerPipeName, O_WRONLY);
-    if (registerPipe < 0) {
-        perror("Failed to open register pipe");
-        return EXIT_FAILURE;
-    }
+    registerPipe = pipe_open(registerPipeName, O_WRONLY);
 
     packet_t register_packet;
     registration_data_t registration_data;
@@ -56,21 +52,11 @@ int main(int argc, char **argv) {
 
     register_packet.opcode = REGISTER_SUBSCRIBER;
     memcpy(registration_data.client_pipe, clientPipeName,
-            strlen(clientPipeName) + 1);
-    memcpy(registration_data.box_name, boxName,
-            strlen(boxName) + 1);
+           strlen(clientPipeName) + 1);
+    memcpy(registration_data.box_name, boxName, strlen(boxName) + 1);
     register_packet.payload.registration_data = registration_data;
 
-    // Create pipe (and delete first if it exists)
-    if (unlink(clientPipeName) != 0 && errno != ENOENT) {
-        perror("Failed to delete pipe");
-        return EXIT_FAILURE;
-    }
-
-    if (mkfifo(clientPipeName, 0666) != 0) {
-        perror("Failed to create pipe");
-        return EXIT_FAILURE;
-    }
+    pipe_create(clientPipeName);
 
     if (write(registerPipe, &register_packet, sizeof(packet_t)) < 0) {
         perror("Failed to write to register pipe");
@@ -81,21 +67,17 @@ int main(int argc, char **argv) {
 
     printf("Now Listening for Publisher messages\n");
 
-    clientPipe = open(clientPipeName, O_RDONLY);
+    clientPipe = pipe_open(clientPipeName, O_RDONLY);
 
     while (true) {
-        if (clientPipe < 0) {
-            perror("Failed to open client pipe");
-            break;
-        }
-
         packet_t packet;
         if (read(clientPipe, &packet, sizeof(packet_t)) <= 0) {
             WARN("Failed to read from client pipe\n");
             break;
         }
 
-        printf("Reading from mailbox: %s\n", packet.payload.message_data.message);
+        printf("Reading from mailbox: %s\n",
+               packet.payload.message_data.message);
 
         messagesReceived++;
     }

@@ -1,5 +1,6 @@
 #include "list.h"
 #include "logging.h"
+#include "pipes.h"
 #include "protocol.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -24,7 +25,7 @@ static void print_usage() {
             "   manager <register_pipe_name> <pipe_name> list\n");
 }
 
-char* remove_first_char(char *str) {
+char *remove_first_char(char *str) {
     int i;
     for (i = 0; i < strlen(str); i++) {
         str[i] = str[i + 1];
@@ -34,10 +35,9 @@ char* remove_first_char(char *str) {
 
 void close_manager() {
     INFO("Closing manager...");
-    // TODO: error handling
-    close(registerPipe);
-    close(clientPipe);
-    unlink(clientPipeName);
+    pipe_close(registerPipe);
+    pipe_close(clientPipe);
+    pipe_destroy(clientPipeName);
 }
 
 void handle_response(packet_t response) {
@@ -52,24 +52,8 @@ void handle_response(packet_t response) {
 }
 
 void create_client_pipe() {
-    // Create pipe (and delete first if it exists)
-    if (unlink(clientPipeName) != 0 && errno != ENOENT) {
-        perror("Failed to delete pipe");
-        exit(EXIT_FAILURE);
-    }
-
-    if (mkfifo(clientPipeName, 0666) != 0) {
-        perror("Failed to create pipe");
-        exit(EXIT_FAILURE);
-    }
-
-    // open client pipe
-    INFO("Opening client pipe %s", clientPipeName);
-    clientPipe = open(clientPipeName, O_RDONLY);
-    if (clientPipe == -1) {
-        fprintf(stderr, "Error opening client pipe");
-        exit(EXIT_FAILURE);
-    }
+    pipe_create(clientPipeName);
+    clientPipe = pipe_open(clientPipeName, O_RDONLY);
 }
 
 int createBox(char *boxName) {
@@ -80,12 +64,7 @@ int createBox(char *boxName) {
     strcpy(payload.client_pipe, clientPipeName);
     packet.payload.registration_data = payload;
 
-    // open register pipe
-    registerPipe = open(registerPipeName, O_WRONLY);
-    if (registerPipe == -1) {
-        fprintf(stderr, "Error opening register pipe");
-        return EXIT_FAILURE;
-    }
+    registerPipe = pipe_open(registerPipeName, O_WRONLY);
 
     // write to register pipe
     if (write(registerPipe, &packet, sizeof(packet_t)) == -1) {
@@ -116,12 +95,7 @@ int removeBox(char *boxName) {
     strcpy(payload.client_pipe, clientPipeName);
     packet.payload.registration_data = payload;
 
-    // open register pipe
-    registerPipe = open(registerPipeName, O_WRONLY);
-    if (registerPipe == -1) {
-        fprintf(stderr, "Error opening register pipe");
-        return EXIT_FAILURE;
-    }
+    registerPipe = pipe_open(registerPipeName, O_WRONLY);
 
     // write to register pipe
     if (write(registerPipe, &packet, sizeof(packet_t)) == -1) {
@@ -152,12 +126,7 @@ int listBoxes() {
     strcpy(payload.client_pipe, clientPipeName);
     packet.payload.list_box_data = payload;
 
-    // open register pipe
-    registerPipe = open(registerPipeName, O_WRONLY);
-    if (registerPipe == -1) {
-        fprintf(stderr, "Error opening register pipe");
-        return EXIT_FAILURE;
-    }
+    registerPipe = pipe_open(registerPipeName, O_WRONLY);
 
     // write to register pipe
     if (write(registerPipe, &packet, sizeof(packet_t)) == -1) {
