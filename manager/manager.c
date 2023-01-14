@@ -24,6 +24,14 @@ static void print_usage() {
             "   manager <register_pipe_name> <pipe_name> list\n");
 }
 
+char* remove_first_char(char *str) {
+    int i;
+    for (i = 0; i < strlen(str); i++) {
+        str[i] = str[i + 1];
+    }
+    return str;
+}
+
 void close_manager() {
     printf("Closing manager...\n");
     // TODO: error handling
@@ -179,7 +187,7 @@ int listBoxes() {
         }
 
         tfs_file new_file;
-        strcpy(new_file.box_name, data.box_name);
+        strcpy(new_file.box_name, remove_first_char(data.box_name));
         new_file.n_subscribers = data.n_subscribers;
         new_file.n_publishers = data.n_publishers;
 
