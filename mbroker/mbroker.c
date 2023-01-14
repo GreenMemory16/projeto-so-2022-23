@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "list.h"
 
 static int registerPipe;
 static char *registerPipeName;
@@ -22,8 +23,7 @@ static size_t maxSessions;
 static worker_t *workers;
 static sem_t hasNewMessage;
 static pc_queue_t queue;
-static int tfs_index = 0;
-static tfs_file file_list[MAX_FILES];
+static List list;
 
 const tfs_params params = {
     .max_inode_count = 64,
@@ -32,22 +32,42 @@ const tfs_params params = {
     .block_size = 1024,
 };
 
+ListNode *search_prev_node(char *box_name) {
+    ListNode *node = list.head;
+
+    // if we want to remove the head, there is no previous node
+    if (strcmp(node->file.box_name, box_name) == 0) 
+        return NULL;
+    
+    while (node->next != NULL) {
+        if (strcmp(node->next->file.box_name, box_name) == 0) {
+            return node;
+        }
+        node = node->next;
+    }
+
+    return NULL;
+}
+
+ListNode *search_node(char *box_name) {
+    ListNode *node = list.head;
+
+    while (node != NULL) {
+        if (strcmp(node->file.box_name, box_name) == 0) {
+            return node;
+        }
+        node = node->next;
+    }
+
+    return NULL;
+}
+
 ssize_t try_read(int fd, void *buf, size_t count) {
     ssize_t bytes_read;
     do {
         bytes_read = read(fd, buf, count);
     } while (bytes_read < 0 && errno == EINTR);
     return bytes_read;
-}
-
-int search_array(char *box_name) {
-    for (int i = 0; i <= tfs_index; i++) {
-        if (strcmp(box_name, file_list->box_name) == 0) {
-            return i;
-        }
-    }
-
-    return 0;
 }
 
 void *session_worker(void *args) {
@@ -70,8 +90,10 @@ void *session_worker(void *args) {
             int pipe = open(pipeName, O_RDONLY);
 
             // increment box publisher
-            int index = search_array(payload.box_name);
-            file_list[index].n_publishers++;
+            ListNode *node = search_node(payload.box_name);
+            if (node != NULL) {
+                node->file.n_publishers++;
+            } 
 
             // open TFS box
             int box = tfs_open(payload.box_name, TFS_O_EXISTS);
@@ -93,7 +115,7 @@ void *session_worker(void *args) {
             }
 
             // decrement box publisher
-            file_list[index].n_publishers--;
+            node->file.n_publishers--;
 
             break;
         }
@@ -111,8 +133,10 @@ void *session_worker(void *args) {
             // int pipe = open(pipeName, O_WRONLY);
 
             // increment box subscribers
-            // int index = search_array(payload.box_name);
-            // file_list[index].n_subscribers++;
+            ListNode *node = search_node(payload.box_name);
+            if (node != NULL) {
+                node->file.n_subscribers++;
+            }
 
             // open TFS box
             printf("Opening box %s\n", payload.box_name);
@@ -141,8 +165,9 @@ void *session_worker(void *args) {
             // listen for new messages by publisher
 
             close(pipe);
+
             // decrement box subscribers
-            // file_list[index].n_subscribers--;
+            node->file.n_subscribers--;
 
             break;
         }
@@ -161,23 +186,20 @@ void *session_worker(void *args) {
             new_packet.payload.answer_data.return_code = 0;
             write(pipe, &new_packet, sizeof(packet_t));
 
-            // Creates the file entry in array
-            tfs_file file_entry;
-            strcpy(file_entry.box_name, payload.box_name);
-            file_entry.n_publishers = 0;
-            file_entry.n_subscribers = 0;
-
-            file_list[tfs_index] = file_entry;
-            tfs_index++;
-
             // Creates Mailbox
             int box = tfs_open(payload.box_name, TFS_O_CREAT);
             if (box == -1) {
                 fprintf(stderr, "Failed to create box\n");
             }
 
-            tfs_close(box);
+            // adds file to the list
+            tfs_file new_file;
+            strcpy(new_file.box_name, payload.box_name);
+            new_file.n_publishers = 0;
+            new_file.n_subscribers = 0;
+            list_add(&list, new_file);
 
+            tfs_close(box);
             close(pipe);
 
             break;
@@ -203,7 +225,12 @@ void *session_worker(void *args) {
             }
 
             // removes tfs_file from tfs_list
-            
+            ListNode *prev = search_prev_node(payload.box_name);
+            if (prev != NULL) {
+                list_remove(&list, prev, prev->next);
+            } else {
+                list_remove(&list, NULL, list.head);
+            }
 
             close(pipe);
 
@@ -216,9 +243,12 @@ void *session_worker(void *args) {
 
             int pipe = open(pipeName, O_WRONLY);
 
-            packet_t new_packet;
-            new_packet.opcode = LIST_MAILBOXES_ANSWER;
+            // DUMMY LIST MAILBOXES PRINT
+            list_print(&list);
 
+            //packet_t new_packet;
+            //new_packet.opcode = LIST_MAILBOXES_ANSWER;
+            /*
             if (tfs_index == 0) {
                 new_packet.payload.mailbox_data.last = 1;
                 memset(new_packet.payload.mailbox_data.box_name, 0,
@@ -243,6 +273,7 @@ void *session_worker(void *args) {
                     write(pipe, &new_packet, sizeof(packet_t));
                 }
             }
+            */
 
             close(pipe);
             break;
@@ -259,6 +290,8 @@ void *session_worker(void *args) {
 }
 
 int start_server() {
+    list_init(&list);
+
     workers = malloc(sizeof(worker_t) * maxSessions);
     for (int i = 0; i < maxSessions; ++i) {
         if (pthread_mutex_init(&workers[i].lock, NULL) != 0) {
