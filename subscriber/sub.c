@@ -86,13 +86,13 @@ int main(int argc, char **argv) {
     while (true) {
         if (clientPipe < 0) {
             perror("Failed to open client pipe");
-            return EXIT_FAILURE;
+            break;
         }
 
         packet_t packet;
         if (read(clientPipe, &packet, sizeof(packet_t)) <= 0) {
-            perror("Failed to read from client pipe");
-            return EXIT_FAILURE;
+            WARN("Failed to read from client pipe\n");
+            break;
         }
 
         printf("Reading from mailbox: %s\n", packet.payload.message_data.message);

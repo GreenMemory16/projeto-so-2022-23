@@ -60,7 +60,7 @@ typedef struct __attribute__((packed)) packet_t {
 } packet_t;
 
 typedef struct worker_t {
-    packet_t packet;
+    int id;
     pthread_t thread;
     pthread_mutex_t lock;
     pthread_cond_t cond;

@@ -74,15 +74,12 @@ void *session_worker(void *args) {
     worker_t *worker = (worker_t *)args;
     while (true) {
         sem_wait(&hasNewMessage);
+        INFO("Worker %d has new message", worker->id);
         packet_t packet = *(packet_t *)pcq_dequeue(&queue);
-        // pthread_mutex_lock(&worker->lock);
-        // while (worker->packet.opcode == 0) {
-        //     pthread_cond_wait(&worker->cond, &worker->lock);
-        // }
 
         switch (packet.opcode) {
         case REGISTER_PUBLISHER: {
-            printf("Registering Publisher\n");
+            INFO("Registering Publisher\n");
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
@@ -98,7 +95,9 @@ void *session_worker(void *args) {
             // open TFS box
             int box = tfs_open(payload.box_name, TFS_O_EXISTS);
             if (box == -1) {
-                fprintf(stderr, "Failed to open box\n");
+                WARN("Failed to open box\n");
+                close(pipe);
+                break;
             }
 
             // wait for new message
@@ -120,17 +119,26 @@ void *session_worker(void *args) {
             break;
         }
         case REGISTER_SUBSCRIBER: {
-            printf("Registering subscriber\n");
+            INFO("Registering subscriber\n");
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
-
-            printf("%s\n", pipeName);
 
             // packet_t new_packet;
             // new_packet.opcode = SEND_MESSAGE;
 
             // open client pipe
             // int pipe = open(pipeName, O_WRONLY);
+
+            // open client pipe
+            int pipe = open(pipeName, O_WRONLY);
+
+            // open TFS box
+            int box = tfs_open(payload.box_name, TFS_O_EXISTS);
+            if (box == -1) {
+                WARN("Failed to open box\n");
+                close(pipe);
+                break;
+            }
 
             // increment box subscribers
             ListNode *node = search_node(payload.box_name);
@@ -162,7 +170,7 @@ void *session_worker(void *args) {
                 }
             }
 
-            // listen for new messages by publisher
+            // TODO: listen for new messages by publisher
 
             close(pipe);
 
@@ -172,7 +180,7 @@ void *session_worker(void *args) {
             break;
         }
         case CREATE_MAILBOX: {
-            printf("Creating Mailbox\n");
+            INFO("Creating Mailbox\n");
 
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
@@ -205,7 +213,7 @@ void *session_worker(void *args) {
             break;
         }
         case REMOVE_MAILBOX: {
-            printf("Removing Mailbox\n");
+            INFO("Removing Mailbox\n");
 
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
@@ -237,7 +245,7 @@ void *session_worker(void *args) {
             break;
         }
         case LIST_MAILBOXES: {
-            printf("Listing Mailboxes\n");
+            INFO("Listing Mailboxes\n");
             list_box_data_t payload = packet.payload.list_box_data;
             char *pipeName = payload.client_pipe;
 
@@ -283,9 +291,7 @@ void *session_worker(void *args) {
         }
         }
 
-        printf("Exiting thread\n");
-
-        pthread_mutex_unlock(&worker->lock);
+        INFO("Worker %d finished", worker->id);
     }
 }
 
@@ -294,6 +300,7 @@ int start_server() {
 
     workers = malloc(sizeof(worker_t) * maxSessions);
     for (int i = 0; i < maxSessions; ++i) {
+        workers[i].id = i;
         if (pthread_mutex_init(&workers[i].lock, NULL) != 0) {
             return -1;
         }

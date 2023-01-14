@@ -18,11 +18,12 @@ static char *clientPipeName;
 static int clientPipe;
 
 void close_publisher() {
-    printf("Closing publisher...\n");
+    INFO("Closing publisher...\n");
     // TODO: error handling
     close(registerPipe);
     close(clientPipe);
     unlink(clientPipeName);
+    exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char **argv) {
@@ -35,6 +36,7 @@ int main(int argc, char **argv) {
     }
 
     signal(SIGINT, close_publisher);
+    signal(SIGPIPE, close_publisher);
 
     registerPipeName = argv[1];
     clientPipeName = argv[2];
@@ -79,6 +81,12 @@ int main(int argc, char **argv) {
     printf("Now waiting for user input:\n");
 
     clientPipe = open(clientPipeName, O_WRONLY);
+
+    // check if pipe is open
+    if (clientPipe < 0) {
+        perror("Failed to open pipe");
+        return EXIT_FAILURE;
+    }
 
     // send new message for every new line until EOF is reached
     char buffer[MESSAGE_SIZE + 1];
