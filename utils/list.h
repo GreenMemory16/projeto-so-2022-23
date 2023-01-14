@@ -11,6 +11,7 @@ typedef struct ListNode {
 typedef struct List {
     ListNode *head;
     ListNode *tail;
+    pthread_mutex_t lock;
 } List;
 
 void list_init(List *list);

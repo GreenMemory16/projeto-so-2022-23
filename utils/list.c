@@ -8,9 +8,11 @@
 void list_init(List *list) {
     list->head = NULL;
     list->tail = NULL;
+    pthread_mutex_init(&list->lock, NULL);
 }
 
 void list_add(List *list, tfs_file file) {
+    pthread_mutex_lock(&list->lock);
     ListNode *node = malloc(sizeof(ListNode));
     node->file = file;
     node->next = NULL;
@@ -22,6 +24,7 @@ void list_add(List *list, tfs_file file) {
         list->tail->next = node;
         list->tail = node;
     }
+    pthread_mutex_unlock(&list->lock);
 }
 
 int list_find(List *list, char *box_name) {
@@ -37,6 +40,7 @@ int list_find(List *list, char *box_name) {
 }
 
 void list_remove(List *list, ListNode *prev, ListNode *node) {
+    pthread_mutex_lock(&list->lock);
     if (node == NULL)
         return;
 
@@ -46,9 +50,11 @@ void list_remove(List *list, ListNode *prev, ListNode *node) {
         prev->next = node->next;
     }
     free(node);
+    pthread_mutex_unlock(&list->lock);
 }
 
 void list_destroy(List *list) {
+    pthread_mutex_destroy(&list->lock);
     ListNode *node = list->head;
     ListNode *next;
 
@@ -71,6 +77,7 @@ void list_print(List *list) {
 }
 
 void list_sort(List *list) {
+    pthread_mutex_lock(&list->lock);
     ListNode *node, *next, *prev;
     int ended = false;
 
@@ -94,6 +101,7 @@ void list_sort(List *list) {
             }
         }
     }
+    pthread_mutex_unlock(&list->lock);
 }
 
 ListNode *search_prev_node(List *list, char *box_name) {
