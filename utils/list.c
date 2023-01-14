@@ -95,3 +95,33 @@ void list_sort(List *list) {
         }
     }
 }
+
+ListNode *search_prev_node(List *list, char *box_name) {
+    ListNode *node = list->head;
+
+    // if we want to remove the head, there is no previous node
+    if (strcmp(node->file.box_name, box_name) == 0)
+        return NULL;
+
+    while (node->next != NULL) {
+        if (strcmp(node->next->file.box_name, box_name) == 0) {
+            return node;
+        }
+        node = node->next;
+    }
+
+    return NULL;
+}
+
+ListNode *search_node(List *list, char *box_name) {
+    ListNode *node = list->head;
+
+    while (node != NULL) {
+        if (strcmp(node->file.box_name, box_name) == 0) {
+            return node;
+        }
+        node = node->next;
+    }
+
+    return NULL;
+}

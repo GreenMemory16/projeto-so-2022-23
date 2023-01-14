@@ -20,5 +20,7 @@ void list_remove(List *list, ListNode *prev, ListNode *node);
 void list_destroy(List *list);
 void list_print(List *list);
 void list_sort(List *list);
+ListNode *search_prev_node(List *list, char *box_name);
+ListNode *search_node(List *list, char *box_name);
 
 #endif

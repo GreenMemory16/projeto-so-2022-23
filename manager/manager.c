@@ -25,14 +25,6 @@ static void print_usage() {
             "   manager <register_pipe_name> <pipe_name> list\n");
 }
 
-char *remove_first_char(char *str) {
-    int i;
-    for (i = 0; i < strlen(str); i++) {
-        str[i] = str[i + 1];
-    }
-    return str;
-}
-
 void close_manager() {
     INFO("Closing manager...");
     pipe_close(registerPipe);
@@ -51,11 +43,6 @@ void handle_response(packet_t response) {
     }
 }
 
-void create_client_pipe() {
-    pipe_create(clientPipeName);
-    clientPipe = pipe_open(clientPipeName, O_RDONLY);
-}
-
 int createBox(char *boxName) {
     packet_t packet;
     registration_data_t payload;
@@ -63,6 +50,8 @@ int createBox(char *boxName) {
     strcpy(payload.box_name, boxName);
     strcpy(payload.client_pipe, clientPipeName);
     packet.payload.registration_data = payload;
+
+    pipe_create(clientPipeName);
 
     registerPipe = pipe_open(registerPipeName, O_WRONLY);
 
@@ -72,7 +61,7 @@ int createBox(char *boxName) {
         return EXIT_FAILURE;
     }
 
-    create_client_pipe();
+    clientPipe = pipe_open(clientPipeName, O_RDONLY);
 
     // read from client pipe
     packet_t response;
@@ -95,18 +84,17 @@ int removeBox(char *boxName) {
     strcpy(payload.client_pipe, clientPipeName);
     packet.payload.registration_data = payload;
 
-    registerPipe = pipe_open(registerPipeName, O_WRONLY);
+    pipe_create(clientPipeName);
 
-    // write to register pipe
+    registerPipe = pipe_open(registerPipeName, O_WRONLY);
     if (write(registerPipe, &packet, sizeof(packet_t)) == -1) {
         fprintf(stderr, "Error writing to register pipe");
         return EXIT_FAILURE;
     }
 
-    create_client_pipe();
+    clientPipe = pipe_open(clientPipeName, O_RDONLY);
 
     // read from client pipe
-
     packet_t response;
     if (read(clientPipe, &response, sizeof(packet_t)) == -1) {
         fprintf(stderr, "Error reading from client pipe");
@@ -126,15 +114,15 @@ int listBoxes() {
     strcpy(payload.client_pipe, clientPipeName);
     packet.payload.list_box_data = payload;
 
-    registerPipe = pipe_open(registerPipeName, O_WRONLY);
+    pipe_create(clientPipeName);
 
-    // write to register pipe
+    registerPipe = pipe_open(registerPipeName, O_WRONLY);
     if (write(registerPipe, &packet, sizeof(packet_t)) == -1) {
         fprintf(stderr, "Error writing to register pipe");
         return EXIT_FAILURE;
     }
 
-    create_client_pipe();
+    clientPipe = pipe_open(clientPipeName, O_RDONLY);
 
     list_init(&list);
 
@@ -149,14 +137,14 @@ int listBoxes() {
         }
 
         tfs_file new_file;
-        strcpy(new_file.box_name, remove_first_char(data.box_name));
+        strcpy(new_file.box_name, data.box_name);
         new_file.n_subscribers = data.n_subscribers;
         new_file.n_publishers = data.n_publishers;
 
         list_add(&list, new_file);
 
         if (data.last == 1) {
-            printf("Last Box reached\n");
+            INFO("Last Box reached\n");
             break;
         }
     }

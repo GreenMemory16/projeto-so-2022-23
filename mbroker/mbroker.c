@@ -34,42 +34,20 @@ const tfs_params params = {
     .block_size = 1024,
 };
 
-ListNode *search_prev_node(char *box_name) {
-    ListNode *node = list.head;
-
-    // if we want to remove the head, there is no previous node
-    if (strcmp(node->file.box_name, box_name) == 0)
-        return NULL;
-
-    while (node->next != NULL) {
-        if (strcmp(node->next->file.box_name, box_name) == 0) {
-            return node;
-        }
-        node = node->next;
-    }
-
-    return NULL;
-}
-
-ListNode *search_node(char *box_name) {
-    ListNode *node = list.head;
-
-    while (node != NULL) {
-        if (strcmp(node->file.box_name, box_name) == 0) {
-            return node;
-        }
-        node = node->next;
-    }
-
-    return NULL;
-}
-
 ssize_t try_read(int fd, void *buf, size_t count) {
     ssize_t bytes_read;
     do {
         bytes_read = read(fd, buf, count);
     } while (bytes_read < 0 && errno == EINTR);
     return bytes_read;
+}
+
+char *formatBoxName(char *boxName) {
+    // add a slash to the beginning of the box name
+    char *formattedBoxName = malloc(strlen(boxName) + 2);
+    formattedBoxName[0] = '/';
+    strcpy(formattedBoxName + 1, boxName);
+    return formattedBoxName;
 }
 
 void *session_worker(void *args) {
@@ -88,13 +66,13 @@ void *session_worker(void *args) {
             int pipe = pipe_open(pipeName, O_RDONLY);
 
             // increment box publisher
-            ListNode *node = search_node(payload.box_name);
+            ListNode *node = search_node(&list, payload.box_name);
             if (node != NULL) {
                 node->file.n_publishers++;
             }
 
             // open TFS box
-            int box = tfs_open(payload.box_name, TFS_O_EXISTS);
+            int box = tfs_open(formatBoxName(payload.box_name), TFS_O_EXISTS);
             if (box == -1) {
                 WARN("Failed to open box\n");
                 pipe_close(pipe);
@@ -127,7 +105,7 @@ void *session_worker(void *args) {
             int pipe = pipe_open(pipeName, O_WRONLY);
 
             // open TFS box
-            int box = tfs_open(payload.box_name, TFS_O_EXISTS);
+            int box = tfs_open(formatBoxName(payload.box_name), TFS_O_EXISTS);
             if (box == -1) {
                 WARN("Failed to open box\n");
                 pipe_close(pipe);
@@ -135,7 +113,7 @@ void *session_worker(void *args) {
             }
 
             // increment box subscribers
-            ListNode *node = search_node(payload.box_name);
+            ListNode *node = search_node(&list, payload.box_name);
             if (node != NULL) {
                 node->file.n_subscribers++;
             }
@@ -177,7 +155,7 @@ void *session_worker(void *args) {
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
 
             // Creates Mailbox
-            int box = tfs_open(payload.box_name, TFS_O_CREAT);
+            int box = tfs_open(formatBoxName(payload.box_name), TFS_O_CREAT);
             if (box == -1) {
                 WARN("Failed to create box\n");
                 new_packet.payload.answer_data.return_code = -1;
@@ -239,7 +217,7 @@ void *session_worker(void *args) {
             }
 
             // removes tfs_file from tfs_list
-            ListNode *prev = search_prev_node(payload.box_name);
+            ListNode *prev = search_prev_node(&list, payload.box_name);
             if (prev != NULL) {
                 list_remove(&list, prev, prev->next);
             } else {
@@ -353,6 +331,8 @@ int start_server() {
 }
 
 void close_server(int status) {
+    list_destroy(&list);
+
     pipe_close(registerPipe);
     pipe_destroy(registerPipeName);
 
