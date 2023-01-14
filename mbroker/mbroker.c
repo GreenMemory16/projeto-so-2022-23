@@ -207,7 +207,7 @@ void *session_worker(void *args) {
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
 
             // Deletes Mailbox
-            if (tfs_unlink(payload.box_name) == -1) {
+            if (tfs_unlink(formatBoxName(payload.box_name)) == -1) {
                 WARN("Failed to delete box");
                 new_packet.payload.answer_data.return_code = -1;
                 strcpy(new_packet.payload.answer_data.error_message,
