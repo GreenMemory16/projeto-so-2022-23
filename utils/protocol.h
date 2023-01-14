@@ -73,17 +73,4 @@ typedef struct tfs_file {
     uint64_t box_size;
 } tfs_file;
 
-typedef struct ListNode {
-    tfs_file file;
-    struct ListNode *next;
-} ListNode;
-
-typedef struct List {
-	ListNode* head;
-	ListNode* tail;
-} List;
-
-
-
-
 #endif

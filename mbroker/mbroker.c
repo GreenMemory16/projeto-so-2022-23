@@ -1,4 +1,5 @@
 #include "../producer-consumer/producer-consumer.h"
+#include "list.h"
 #include "logging.h"
 #include "operations.h"
 #include "protocol.h"
@@ -15,7 +16,6 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include "list.h"
 
 static int registerPipe;
 static char *registerPipeName;
@@ -37,9 +37,9 @@ ListNode *search_prev_node(char *box_name) {
     ListNode *node = list.head;
 
     // if we want to remove the head, there is no previous node
-    if (strcmp(node->file.box_name, box_name) == 0) 
+    if (strcmp(node->file.box_name, box_name) == 0)
         return NULL;
-    
+
     while (node->next != NULL) {
         if (strcmp(node->next->file.box_name, box_name) == 0) {
             return node;
@@ -91,7 +91,7 @@ void *session_worker(void *args) {
             ListNode *node = search_node(payload.box_name);
             if (node != NULL) {
                 node->file.n_publishers++;
-            } 
+            }
 
             // open TFS box
             int box = tfs_open(payload.box_name, TFS_O_EXISTS);
@@ -146,14 +146,6 @@ void *session_worker(void *args) {
             if (node != NULL) {
                 node->file.n_subscribers++;
             }
-
-            // open TFS box
-            printf("Opening box %s\n", payload.box_name);
-            int box = tfs_open(payload.box_name, TFS_O_EXISTS);
-            printf("Box: %d\n", box);
-
-            // open pipe
-            int pipe = open(pipeName, O_WRONLY);
 
             // get all messages from box
             char buffer[MESSAGE_SIZE];
@@ -284,8 +276,8 @@ void *session_worker(void *args) {
                 write(pipe, &new_packet, sizeof(packet_t));
             }
 
-            //packet_t new_packet;
-            //new_packet.opcode = LIST_MAILBOXES_ANSWER;
+            // packet_t new_packet;
+            // new_packet.opcode = LIST_MAILBOXES_ANSWER;
             /*
             if (tfs_index == 0) {
                 new_packet.payload.mailbox_data.last = 1;
