@@ -159,6 +159,7 @@ int listBoxes() {
 int main(int argc, char **argv) {
     char *operation;
 
+    // Check if there are enough arguments
     if (argc < 4) {
         print_usage();
         return EXIT_FAILURE;

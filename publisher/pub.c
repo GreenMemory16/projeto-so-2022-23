@@ -30,6 +30,7 @@ int main(int argc, char **argv) {
     char *registerPipeName;
     char *boxName;
 
+    // Checks if there are enough arguments
     if (argc < 3) {
         fprintf(stderr, "usage: pub <register_pipe_name> <box_name>\n");
         return EXIT_FAILURE;
@@ -42,12 +43,13 @@ int main(int argc, char **argv) {
     clientPipeName = argv[2];
     boxName = argv[3];
 
-    // checks is clienePipeName is already in use with access
+    // Checks is clientPipeName is already in use with access
     if (access(clientPipeName, F_OK) != -1) {
         WARN("Client pipe name already in use");
         exit(EXIT_FAILURE);
     }
 
+    // Opens the register server pipe
     registerPipe = pipe_open(registerPipeName, O_WRONLY);
 
     packet_t register_packet;
@@ -55,6 +57,7 @@ int main(int argc, char **argv) {
 
     LOG("Registering publisher");
 
+    // Creates the packet to register the publisher
     register_packet.opcode = REGISTER_PUBLISHER;
     memcpy(registration_data.client_pipe, clientPipeName,
            strlen(clientPipeName) + 1);
@@ -63,13 +66,14 @@ int main(int argc, char **argv) {
 
     pipe_create(clientPipeName);
 
+    // Sends the packet to the server
     pipe_write(registerPipe, &register_packet);
 
     LOG("Opening session pipe %s", clientPipeName);
     clientPipe = pipe_open(clientPipeName, O_WRONLY);
 
     LOG("Waiting for user input");
-    // send new message for every new line until EOF is reached
+    // Send new message for every new line until EOF is reached
     char buffer[MESSAGE_SIZE];
     while (fgets(buffer, MESSAGE_SIZE, stdin) != NULL) {
         packet_t packet;

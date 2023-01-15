@@ -32,6 +32,7 @@ int main(int argc, char **argv) {
     char *boxName;
     char *registerPipeName;
 
+    // Checks if there are enough arguments
     if (argc < 3) {
         fprintf(stderr, "usage: sub <register_pipe_name> <box_name>\n");
         return EXIT_FAILURE;
@@ -43,14 +44,16 @@ int main(int argc, char **argv) {
     clientPipeName = argv[2];
     boxName = argv[3];
 
-    // checks is clienePipeName is already in use with access
+    // Checks is clienePipeName is already in use with access
     if (access(clientPipeName, F_OK) != -1) {
         WARN("Client pipe name already in use");
         exit(EXIT_FAILURE);
     }
 
+    // Opens the register server pipe
     registerPipe = pipe_open(registerPipeName, O_WRONLY);
 
+    // Creates the packet to register the subscriber
     packet_t register_packet;
     registration_data_t registration_data;
 
@@ -63,13 +66,16 @@ int main(int argc, char **argv) {
     register_packet.payload.registration_data = registration_data;
 
     pipe_create(clientPipeName);
-
+    
+    // Sends the packet to the server
     pipe_write(registerPipe, &register_packet);
 
     LOG("Listening for Publisher messages");
 
+    // Opens the client pipe to read messages
     clientPipe = pipe_open(clientPipeName, O_RDONLY);
 
+    // Reads messages from the client pipe
     while (true) {
         packet_t packet;
         ssize_t bytesRead = read(clientPipe, &packet, sizeof(packet_t));
