@@ -74,15 +74,6 @@ void *session_worker() {
                 break;
             }
 
-            INFO("Opening box in TFS");
-            int box = tfs_open(formatBoxName(payload.box_name), TFS_O_APPEND);
-            if (box == -1) {
-                WARN("Failed to open box");
-                int pipe = pipe_open(pipeName, O_RDONLY);
-                pipe_close(pipe);
-                break;
-            }
-
             increment_publishers(&list, payload.box_name);
             DEBUG("Publishers: %ld", node->file.n_publishers);
 
@@ -96,8 +87,20 @@ void *session_worker() {
                     break;
                 }
                 message = new_packet.payload.message_data.message;
+                INFO("Opening box in TFS");
+
+                int box =
+                    tfs_open(formatBoxName(payload.box_name), TFS_O_APPEND);
+                if (box == -1) {
+                    WARN("Failed to open box");
+                    pipe_close(pipe);
+                    break;
+                }
+
                 if (tfs_write(box, message, strlen(message) + 1) == -1) {
-                    fprintf(stderr, "Failed to write to box\n");
+                    WARN("Failed to write to box");
+                    pipe_close(pipe);
+                    break;
                 }
 
                 // signals condvar to wake up subscribers reading
@@ -105,6 +108,11 @@ void *session_worker() {
                 pthread_cond_broadcast(&node->file.cond);
 
                 node->file.box_size += strlen(message) + 1;
+                if (tfs_close(box) == -1) {
+                    WARN("Failed to close box");
+                    pipe_close(pipe);
+                    break;
+                }
                 INFO("Writing %s", new_packet.payload.message_data.message);
             }
 
