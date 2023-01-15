@@ -43,6 +43,12 @@ int main(int argc, char **argv) {
     clientPipeName = argv[2];
     boxName = argv[3];
 
+    // checks is clienePipeName is already in use with access
+    if (access (clientPipeName, F_OK) != -1) {
+        WARN("Client pipe name already in use");
+        exit(EXIT_FAILURE);
+    }
+
     registerPipe = pipe_open(registerPipeName, O_WRONLY);
 
     packet_t register_packet;

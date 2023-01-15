@@ -304,7 +304,7 @@ void *session_worker() {
             if (node != NULL) {
                 pthread_cond_broadcast(&node->file.cond);
             }
-
+            
             // Removes tfs_file from tfs_list
             ListNode *prev = search_prev_node(&list, payload.box_name);
             // If the node is not the head
