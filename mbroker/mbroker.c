@@ -62,11 +62,15 @@ void *session_worker() {
             ListNode *node = search_node(&list, payload.box_name);
             if (node == NULL) {
                 WARN("Box does not exist");
+                int pipe = pipe_open(pipeName, O_RDONLY);
+                pipe_close(pipe);
                 break;
             }
 
             if (node->file.n_publishers > 0) {
                 WARN("Too many publishers");
+                int pipe = pipe_open(pipeName, O_RDONLY);
+                pipe_close(pipe);
                 break;
             }
 
@@ -74,6 +78,8 @@ void *session_worker() {
             int box = tfs_open(formatBoxName(payload.box_name), TFS_O_APPEND);
             if (box == -1) {
                 WARN("Failed to open box");
+                int pipe = pipe_open(pipeName, O_RDONLY);
+                pipe_close(pipe);
                 break;
             }
 
