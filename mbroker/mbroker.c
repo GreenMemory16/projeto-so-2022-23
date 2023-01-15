@@ -163,16 +163,13 @@ void *session_worker() {
                 pthread_cond_wait(&node->file.cond, &node->file.lock);
                 pthread_mutex_unlock(&node->file.lock);
 
-                printf("SUBSCRIBER WOKEN UP\n");
+                INFO("Subscriber woken up");
                 tfs_read(box, buffer, MESSAGE_SIZE);
-                while (strlen(message) > 0) {
-                    INFO("Sending %s", message);
-                    memset(new_packet.payload.message_data.message, 0,
-                           MESSAGE_SIZE);
-                    strcpy(new_packet.payload.message_data.message, message);
-                    pipe_write(pipe, &new_packet);
-                    message += strlen(message) + 1;
-                }
+                INFO("Sending %s", message);
+                memset(new_packet.payload.message_data.message, 0,
+                       MESSAGE_SIZE);
+                strcpy(new_packet.payload.message_data.message, message);
+                pipe_write(pipe, &new_packet);
             }
 
             pipe_close(pipe);
