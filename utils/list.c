@@ -13,16 +13,21 @@ void list_init(List *list) {
 
 void list_add(List *list, tfs_file file) {
     pthread_mutex_lock(&list->lock);
+
+    // alocates memory for the new node and initializes it
     ListNode *node = malloc(sizeof(ListNode));
     node->file = file;
     node->next = NULL;
     pthread_mutex_init(&file.lock, NULL);
     pthread_cond_init(&file.cond, NULL);
 
+    // if the list is empty, the new node is the head and the tail
     if (list->head == NULL) {
         list->head = node;
         list->tail = node;
-    } else {
+    }
+    // otherwise, the new node is the new tail 
+    else {
         list->tail->next = node;
         list->tail = node;
     }
@@ -32,15 +37,20 @@ void list_add(List *list, tfs_file file) {
 
 void list_remove(List *list, ListNode *prev, ListNode *node) {
     pthread_mutex_lock(&list->lock);
+
+    // if the node is not in the list, do not proceed
     if (node == NULL) {
         pthread_mutex_unlock(&list->lock);
         return;
     }
+
+    // if the node is the head, the next node is the new head
     if (prev == NULL) {
         list->head = node->next;
     } else {
         prev->next = node->next;
     }
+
     free(node);
     list->size--;
     pthread_mutex_unlock(&list->lock);
@@ -111,6 +121,7 @@ ListNode *search_prev_node(List *list, char *box_name) {
         return NULL;
     }
 
+    // look for the node with the given box_name
     while (node->next != NULL) {
         if (strcmp(node->next->file.box_name, box_name) == 0) {
             pthread_mutex_unlock(&list->lock);
@@ -126,6 +137,7 @@ ListNode *search_node(List *list, char *box_name) {
     pthread_mutex_lock(&list->lock);
     ListNode *node = list->head;
 
+    // look for the node with the given box_name
     while (node != NULL) {
         if (strcmp(node->file.box_name, box_name) == 0) {
             pthread_mutex_unlock(&list->lock);
@@ -141,7 +153,8 @@ ListNode *search_node(List *list, char *box_name) {
 void increment_publishers(List *list, char *box_name) {
     pthread_mutex_lock(&list->lock);
     ListNode *node = list->head;
-
+    
+    // look for the node with the given box_name
     while (node != NULL) {
         if (strcmp(node->file.box_name, box_name) == 0) {
             node->file.n_publishers++;
@@ -158,6 +171,7 @@ void decrement_publishers(List *list, char *box_name) {
     pthread_mutex_lock(&list->lock);
     ListNode *node = list->head;
 
+    // look for the node with the given box_name
     while (node != NULL) {
         if (strcmp(node->file.box_name, box_name) == 0) {
             node->file.n_publishers--;
@@ -174,6 +188,7 @@ void increment_subscribers(List *list, char *box_name) {
     pthread_mutex_lock(&list->lock);
     ListNode *node = list->head;
 
+    // look for the node with the given box_name
     while (node != NULL) {
         if (strcmp(node->file.box_name, box_name) == 0) {
             node->file.n_subscribers++;
@@ -190,6 +205,7 @@ void decrement_subscribers(List *list, char *box_name) {
     pthread_mutex_lock(&list->lock);
     ListNode *node = list->head;
 
+    // look for the node with the given box_name
     while (node != NULL) {
         if (strcmp(node->file.box_name, box_name) == 0) {
             node->file.n_subscribers--;

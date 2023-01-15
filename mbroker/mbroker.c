@@ -54,12 +54,18 @@ void *session_worker() {
 
         switch (packet.opcode) {
         case REGISTER_PUBLISHER: {
+            // Register a publisher to a given box
+
             INFO("Registering Publisher");
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
             INFO("Verifying box exists");
+
+            // Looks for the box in the list
             ListNode *node = search_node(&list, payload.box_name);
+
+            // If the box does not exist, create it
             if (node == NULL) {
                 WARN("Box does not exist");
                 int pipe = pipe_open(pipeName, O_RDONLY);
@@ -67,6 +73,7 @@ void *session_worker() {
                 break;
             }
 
+            // If the box already has a publisher, reject the new publisher
             if (node->file.n_publishers > 0) {
                 WARN("Too many publishers");
                 int pipe = pipe_open(pipeName, O_RDONLY);
@@ -74,6 +81,7 @@ void *session_worker() {
                 break;
             }
 
+            // Increment number of publishers of the box
             increment_publishers(&list, payload.box_name);
             DEBUG("Publishers: %ld", node->file.n_publishers);
 
@@ -83,9 +91,11 @@ void *session_worker() {
             packet_t new_packet;
             char *message;
             while (true) {
-                if (try_read(pipe, &new_packet, sizeof(packet_t)) <= 0) {
+                // Reads packet from publisher
+                if (try_read(pipe, &new_packet, sizeof(packet_t)) <= 0) 
                     break;
-                }
+                
+
                 message = new_packet.payload.message_data.message;
                 INFO("Opening box in TFS");
 
@@ -115,18 +125,25 @@ void *session_worker() {
 
             pipe_close(pipe);
             decrement_publishers(&list, payload.box_name);
+
             break;
         }
         case REGISTER_SUBSCRIBER: {
+            // Register a subscriber to a given mailbox
+
             INFO("Registering subscriber");
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
             INFO("Verifying box exists");
+
+            // Looks for the box in the list
             ListNode *node = search_node(&list, payload.box_name);
+
+            // If box does not exist, sends error message 
             if (node == NULL) {
                 WARN("Box does not exist");
-                // the pipe is opened and then closed to notify the client that
+                // The pipe is opened and then closed to notify the client that
                 // the box does not exist
                 int pipe = pipe_open(pipeName, O_WRONLY);
                 pipe_close(pipe);
@@ -134,7 +151,10 @@ void *session_worker() {
             }
 
             INFO("Opening box in TFS");
+
+            // Open box in TFS
             int box = tfs_open(formatBoxName(payload.box_name), 0);
+            // If box creation fails, sends error message 
             if (box == -1) {
                 WARN("Failed to open box");
                 int pipe = pipe_open(pipeName, O_WRONLY);
@@ -142,12 +162,13 @@ void *session_worker() {
                 break;
             }
 
+            // Increment number of subscribers of the box
             increment_subscribers(&list, payload.box_name);
 
             INFO("Waiting to write messages");
             int pipe = pipe_open(pipeName, O_WRONLY);
 
-            // send messages to subscriber
+            // Send messages to subscriber
             char buffer[MESSAGE_SIZE];
             memset(buffer, 0, MESSAGE_SIZE);
             packet_t new_packet;
@@ -164,7 +185,7 @@ void *session_worker() {
             }
 
             while (true) {
-                // wait for publisher to write to box
+                // Wait for publisher to write to box
                 pthread_mutex_lock(&node->file.lock);
                 pthread_cond_wait(&node->file.cond, &node->file.lock);
                 pthread_mutex_unlock(&node->file.lock);
@@ -194,6 +215,8 @@ void *session_worker() {
             break;
         }
         case CREATE_MAILBOX: {
+            // Creates mailbox in TFS
+
             INFO("Creating Mailbox");
 
             registration_data_t payload = packet.payload.registration_data;
@@ -201,11 +224,13 @@ void *session_worker() {
 
             int pipe = pipe_open(pipeName, O_WRONLY);
 
+            // Creates packet to send to client
             packet_t new_packet;
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
 
             INFO("Checking if box already exists");
 
+            // Checks if box already exists
             if (search_node(&list, payload.box_name) != NULL) {
                 WARN("Box already exists");
                 new_packet.payload.answer_data.return_code = -1;
@@ -220,6 +245,7 @@ void *session_worker() {
 
             // Creates Mailbox
             int box = tfs_open(formatBoxName(payload.box_name), TFS_O_CREAT);
+            // If box creation fails, sends error message 
             if (box == -1) {
                 WARN("Failed to create box");
                 new_packet.payload.answer_data.return_code = -1;
@@ -232,14 +258,12 @@ void *session_worker() {
 
             INFO("Adding box to list");
 
-            // adds file to the list
+            // Initializes new file and adds it to list
             tfs_file new_file;
             strcpy(new_file.box_name, payload.box_name);
             new_file.n_publishers = 0;
             new_file.n_subscribers = 0;
             new_file.box_size = 0;
-            pthread_cond_init(&new_file.cond, NULL);
-            pthread_mutex_init(&new_file.lock, NULL);
 
             list_add(&list, new_file);
 
@@ -253,6 +277,8 @@ void *session_worker() {
             break;
         }
         case REMOVE_MAILBOX: {
+            // Removes mailbox from tfs
+
             INFO("Removing Mailbox");
 
             registration_data_t payload = packet.payload.registration_data;
@@ -260,6 +286,7 @@ void *session_worker() {
 
             int pipe = pipe_open(pipeName, O_WRONLY);
 
+            // Creates packet to send to client
             packet_t new_packet;
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
 
@@ -279,8 +306,15 @@ void *session_worker() {
                 pthread_cond_broadcast(&node->file.cond);
             }
 
-            // removes tfs_file from tfs_list
+            // broadcasts to all subscribers that the box has been deleted
+            ListNode *node = search_node(&list, payload.box_name);
+            if (node != NULL) {
+                pthread_cond_broadcast(&node->file.cond);
+            }
+
+            // Removes tfs_file from tfs_list
             ListNode *prev = search_prev_node(&list, payload.box_name);
+            // If the node is not the head
             if (prev != NULL) {
                 list_remove(&list, prev, prev->next);
             } else {
@@ -296,22 +330,26 @@ void *session_worker() {
             break;
         }
         case LIST_MAILBOXES: {
+            // Sends all existing mailboxes to manager
+
             INFO("Listing Mailboxes");
             list_box_data_t payload = packet.payload.list_box_data;
             char *pipeName = payload.client_pipe;
 
             int pipe = pipe_open(pipeName, O_WRONLY);
 
+            // Creates packet to send to manager
             packet_t new_packet;
             new_packet.opcode = LIST_MAILBOXES_ANSWER;
 
+            // If the list is empty, send a packet with last = 1
             if (list.size == 0) {
                 new_packet.payload.mailbox_data.last = 1;
                 memset(new_packet.payload.mailbox_data.box_name, 0,
                        sizeof(new_packet.payload.mailbox_data.box_name));
                 pipe_write(pipe, &new_packet);
             } else {
-                // Send message for each mailbox
+                // Send packet for each mailbox
                 ListNode *node = list.head;
                 while (node != NULL) {
                     strcpy(new_packet.payload.mailbox_data.box_name,
@@ -323,6 +361,7 @@ void *session_worker() {
                     new_packet.payload.mailbox_data.box_size =
                         node->file.box_size;
 
+                    // if it is the last message, set last = 1
                     if (node->next == NULL) {
                         new_packet.payload.mailbox_data.last = 1;
                     } else {
@@ -372,23 +411,28 @@ int main(int argc, char **argv) {
 
     INFO("Starting server with pipe named %s", registerPipeName);
 
+    // Initialize file list and queue
     list_init(&list);
     pcq_create(&queue, maxSessions);
 
+    // Initialize workers
     workers = malloc(sizeof(pthread_t) * maxSessions);
     for (int i = 0; i < maxSessions; ++i) {
         pthread_create(&workers[i], NULL, session_worker, NULL);
     }
 
-    // start TFS filesystem
+    // Start TFS filesystem
     if (tfs_init(&params) != 0) {
         printf("Failed to init tfs\n");
         return EXIT_FAILURE;
     }
 
+    // Creates and open registration server pipe
     pipe_create(registerPipeName);
     registerPipe = pipe_open(registerPipeName, O_RDONLY);
 
+    // Main loop
+    // Waits for new packets and adds them to the queue
     while (true) {
         int tempPipe = pipe_open(registerPipeName, O_RDONLY);
         pipe_close(tempPipe);
