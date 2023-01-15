@@ -95,8 +95,8 @@ void *session_worker() {
                 }
 
                 // signals condvar to wake up subscribers reading
-                printf("WAKING UP SUBSCRIBERS\n");
-                pthread_cond_signal(&node->file.cond);
+                INFO("Waking up subscribers");
+                pthread_cond_broadcast(&node->file.cond);
 
                 node->file.box_size += strlen(message) + 1;
                 INFO("Writing %s", new_packet.payload.message_data.message);
@@ -114,6 +114,10 @@ void *session_worker() {
             ListNode *node = search_node(&list, payload.box_name);
             if (node == NULL) {
                 WARN("Box does not exist");
+                // the pipe is opened and then closed to notify the client that
+                // the box does not exist
+                int pipe = pipe_open(pipeName, O_WRONLY);
+                pipe_close(pipe);
                 break;
             }
 
@@ -121,8 +125,6 @@ void *session_worker() {
             int box = tfs_open(formatBoxName(payload.box_name), 0);
             if (box == -1) {
                 WARN("Failed to open box");
-                // the pipe is opened and then closed to notify the client that
-                // the box does not exist
                 int pipe = pipe_open(pipeName, O_WRONLY);
                 pipe_close(pipe);
                 break;
@@ -149,15 +151,11 @@ void *session_worker() {
                 message += strlen(message) + 1;
             }
 
-            // TODO: listen for new messages by publisher
-            tfs_file new_file = search_node(&list, payload.box_name)->file;
-            pthread_cond_init(&new_file.cond, NULL);
-            pthread_mutex_init(&new_file.lock, NULL);
-
             while (true) {
-                pthread_mutex_lock(&new_file.lock);
-                pthread_cond_wait(&new_file.cond, &new_file.lock);
-                pthread_mutex_unlock(&new_file.lock);
+                // wait for publisher to write to box
+                pthread_mutex_lock(&node->file.lock);
+                pthread_cond_wait(&node->file.cond, &node->file.lock);
+                pthread_mutex_unlock(&node->file.lock);
 
                 printf("SUBSCRIBER WOKEN UP\n");
                 tfs_read(box, buffer, MESSAGE_SIZE);
@@ -221,8 +219,8 @@ void *session_worker() {
             new_file.n_publishers = 0;
             new_file.n_subscribers = 0;
             new_file.box_size = 0;
-            // pthread_cond_init(&new_file.cond, NULL);
-            // pthread_mutex_init(&new_file.lock, NULL);
+            pthread_cond_init(&new_file.cond, NULL);
+            pthread_mutex_init(&new_file.lock, NULL);
 
             list_add(&list, new_file);
 
