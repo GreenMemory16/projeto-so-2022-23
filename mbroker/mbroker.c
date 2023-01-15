@@ -169,7 +169,9 @@ void *session_worker() {
                 memset(new_packet.payload.message_data.message, 0,
                        MESSAGE_SIZE);
                 strcpy(new_packet.payload.message_data.message, message);
-                pipe_write(pipe, &new_packet);
+                if (write(pipe, &new_packet, sizeof(packet_t)) == -1) {
+                    break;
+                }
             }
 
             pipe_close(pipe);
@@ -343,6 +345,7 @@ int main(int argc, char **argv) {
     }
 
     signal(SIGINT, close_server);
+    signal(SIGPIPE, SIG_IGN);
 
     registerPipeName = argv[1];
     maxSessions = strtoul(argv[2], NULL, 10);

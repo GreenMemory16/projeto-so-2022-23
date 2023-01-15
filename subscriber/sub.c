@@ -25,6 +25,7 @@ void close_subscriber() {
     pipe_close(registerPipe);
     pipe_close(clientPipe);
     pipe_destroy(clientPipeName);
+    exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char **argv) {
