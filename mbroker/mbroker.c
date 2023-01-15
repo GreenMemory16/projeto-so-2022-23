@@ -101,16 +101,16 @@ void *session_worker() {
                     break;
                 }
 
-                // signals condvar to wake up subscribers reading
-                INFO("Waking up subscribers");
-                pthread_cond_broadcast(&node->file.cond);
-
                 node->file.box_size += strlen(message) + 1;
                 if (tfs_close(box) == -1) {
                     WARN("Failed to close box");
                     break;
                 }
                 INFO("Writing %s", new_packet.payload.message_data.message);
+
+                // signals condvar to wake up subscribers reading
+                INFO("Waking up subscribers");
+                pthread_cond_broadcast(&node->file.cond);
             }
 
             pipe_close(pipe);
@@ -150,10 +150,10 @@ void *session_worker() {
             // send messages to subscriber
             char buffer[MESSAGE_SIZE];
             memset(buffer, 0, MESSAGE_SIZE);
-            char *message = buffer;
             packet_t new_packet;
             new_packet.opcode = SEND_MESSAGE;
             tfs_read(box, buffer, MESSAGE_SIZE);
+            char *message = buffer;
             while (strlen(message) > 0) {
                 INFO("Sending %s", message);
                 memset(new_packet.payload.message_data.message, 0,
@@ -162,32 +162,15 @@ void *session_worker() {
                 pipe_write(pipe, &new_packet);
                 message += strlen(message) + 1;
             }
-            if (tfs_close(box) == -1) {
-                WARN("Failed to close box");
-                pipe_close(pipe);
-                break;
-            }
 
             while (true) {
                 // wait for publisher to write to box
                 pthread_mutex_lock(&node->file.lock);
                 pthread_cond_wait(&node->file.cond, &node->file.lock);
                 pthread_mutex_unlock(&node->file.lock);
-
-                INFO("Opening box in TFS");
-                box = tfs_open(formatBoxName(payload.box_name), 0);
-                if (box == -1) {
-                    WARN("Failed to open box");
-                    break;
-                }
-
                 INFO("Subscriber woken up");
                 if (tfs_read(box, buffer, MESSAGE_SIZE) == -1) {
                     WARN("Failed to read from box");
-                    break;
-                }
-                if (tfs_close(box) == -1) {
-                    WARN("Failed to close box");
                     break;
                 }
 
@@ -199,10 +182,15 @@ void *session_worker() {
                     break;
                 }
             }
+            decrement_subscribers(&list, payload.box_name);
 
+            if (tfs_close(box) == -1) {
+                WARN("Failed to close box");
+                pipe_close(pipe);
+                break;
+            }
             pipe_close(pipe);
 
-            decrement_subscribers(&list, payload.box_name);
             break;
         }
         case CREATE_MAILBOX: {
