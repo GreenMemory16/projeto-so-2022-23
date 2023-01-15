@@ -90,15 +90,18 @@ void *session_worker(void *args) {
 
             packet_t new_packet;
             char *message;
-            while (try_read(pipe, &new_packet, sizeof(packet_t)) > 0) {
+            while (true) {
+                if (try_read(pipe, &new_packet, sizeof(packet_t)) <= 0) {
+                    break;
+                }
                 message = new_packet.payload.message_data.message;
                 if (tfs_write(box, message, strlen(message) + 1) == -1) {
                     fprintf(stderr, "Failed to write to box\n");
                 }
 
                 // signals condvar to wake up subscribers reading
-                // printf("WAKING UP SUBSCRIBERS\n");
-                // pthread_cond_signal(&node->file.cond);
+                printf("WAKING UP SUBSCRIBERS\n");
+                pthread_cond_signal(&node->file.cond);
                 
                 node->file.box_size += strlen(message) + 1;
                 INFO("Writing %s", new_packet.payload.message_data.message);
@@ -135,7 +138,6 @@ void *session_worker(void *args) {
             INFO("Waiting to write messages");
             int pipe = pipe_open(pipeName, O_WRONLY);
 
-            printf("SUBBBB\n");
             // send messages to subscriber
             char buffer[MESSAGE_SIZE];
             memset(buffer, 0, MESSAGE_SIZE);
@@ -153,26 +155,26 @@ void *session_worker(void *args) {
             }
 
             // TODO: listen for new messages by publisher
-            // tfs_file new_file = search_node(&list, payload.box_name)->file;
-            // pthread_cond_init(&new_file.cond, NULL);
-            // pthread_mutex_init(&new_file.lock, NULL);
+            tfs_file new_file = search_node(&list, payload.box_name)->file;
+            pthread_cond_init(&new_file.cond, NULL);
+            pthread_mutex_init(&new_file.lock, NULL);
             
-            // while (true) {
-            //     pthread_mutex_lock(&new_file.lock);
-            //     pthread_cond_wait(&new_file.cond, &new_file.lock);
-            //     pthread_mutex_unlock(&new_file.lock);
+            while (true) {
+                pthread_mutex_lock(&new_file.lock);
+                pthread_cond_wait(&new_file.cond, &new_file.lock);
+                pthread_mutex_unlock(&new_file.lock);
 
-            //     printf("SUBSCRIBER WOKEN UP\n");
-            //     tfs_read(box, buffer, MESSAGE_SIZE);
-            //     while (strlen(message) > 0) {
-            //         INFO("Sending %s", message);
-            //         memset(new_packet.payload.message_data.message, 0,
-            //                MESSAGE_SIZE);
-            //         strcpy(new_packet.payload.message_data.message, message);
-            //         pipe_write(pipe, &new_packet);
-            //         message += strlen(message) + 1;
-            //     }
-            // }
+                printf("SUBSCRIBER WOKEN UP\n");
+                tfs_read(box, buffer, MESSAGE_SIZE);
+                while (strlen(message) > 0) {
+                    INFO("Sending %s", message);
+                    memset(new_packet.payload.message_data.message, 0,
+                           MESSAGE_SIZE);
+                    strcpy(new_packet.payload.message_data.message, message);
+                    pipe_write(pipe, &new_packet);
+                    message += strlen(message) + 1;
+                }
+            }
 
             pipe_close(pipe);
 
@@ -224,6 +226,8 @@ void *session_worker(void *args) {
             new_file.n_publishers = 0;
             new_file.n_subscribers = 0;
             new_file.box_size = 0;
+            //pthread_cond_init(&new_file.cond, NULL);
+            //pthread_mutex_init(&new_file.lock, NULL);
 
             list_add(&list, new_file);
 

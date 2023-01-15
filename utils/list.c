@@ -16,6 +16,8 @@ void list_add(List *list, tfs_file file) {
     ListNode *node = malloc(sizeof(ListNode));
     node->file = file;
     node->next = NULL;
+    pthread_mutex_init(&file.lock, NULL);
+    pthread_cond_init(&file.cond, NULL);
 
     if (list->head == NULL) {
         list->head = node;
