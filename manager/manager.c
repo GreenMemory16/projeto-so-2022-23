@@ -33,6 +33,12 @@ void close_manager() {
 }
 
 void handle_response(packet_t response) {
+    if (response.opcode != CREATE_MAILBOX_ANSWER &&
+        response.opcode != REMOVE_MAILBOX_ANSWER &&
+        response.opcode != LIST_MAILBOXES_ANSWER) {
+        WARN("Unexpected response from server\n");
+        return;
+    }
     if (response.payload.answer_data.return_code == 0) {
         fprintf(stdout, "OK\n");
     } else if (response.payload.answer_data.return_code == -1) {
