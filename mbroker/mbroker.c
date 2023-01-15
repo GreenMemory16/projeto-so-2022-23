@@ -306,12 +306,6 @@ void *session_worker() {
                 pthread_cond_broadcast(&node->file.cond);
             }
 
-            // broadcasts to all subscribers that the box has been deleted
-            ListNode *node = search_node(&list, payload.box_name);
-            if (node != NULL) {
-                pthread_cond_broadcast(&node->file.cond);
-            }
-
             // Removes tfs_file from tfs_list
             ListNode *prev = search_prev_node(&list, payload.box_name);
             // If the node is not the head
