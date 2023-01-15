@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     boxName = argv[3];
 
     // checks is clienePipeName is already in use with access
-    if (access (clientPipeName, F_OK) != -1) {
+    if (access(clientPipeName, F_OK) != -1) {
         WARN("Client pipe name already in use");
         exit(EXIT_FAILURE);
     }

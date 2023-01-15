@@ -26,7 +26,7 @@ void list_add(List *list, tfs_file file) {
         list->head = node;
         list->tail = node;
     }
-    // otherwise, the new node is the new tail 
+    // otherwise, the new node is the new tail
     else {
         list->tail->next = node;
         list->tail = node;
@@ -153,7 +153,7 @@ ListNode *search_node(List *list, char *box_name) {
 void increment_publishers(List *list, char *box_name) {
     pthread_mutex_lock(&list->lock);
     ListNode *node = list->head;
-    
+
     // look for the node with the given box_name
     while (node != NULL) {
         if (strcmp(node->file.box_name, box_name) == 0) {
