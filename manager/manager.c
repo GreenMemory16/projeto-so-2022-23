@@ -155,6 +155,12 @@ int main(int argc, char **argv) {
     clientPipeName = argv[2];
     operation = argv[3];
 
+     // checks is clienePipeName is already in use with access
+    if (access (clientPipeName, F_OK) != -1) {
+        WARN("Client pipe name already in use");
+        exit(EXIT_FAILURE);
+    }
+
     if (strcmp(operation, "create") == 0) {
         if (argc < 5) {
             print_usage();
