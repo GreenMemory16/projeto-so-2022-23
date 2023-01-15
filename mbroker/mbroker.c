@@ -93,13 +93,11 @@ void *session_worker() {
                     tfs_open(formatBoxName(payload.box_name), TFS_O_APPEND);
                 if (box == -1) {
                     WARN("Failed to open box");
-                    pipe_close(pipe);
                     break;
                 }
 
                 if (tfs_write(box, message, strlen(message) + 1) == -1) {
                     WARN("Failed to write to box");
-                    pipe_close(pipe);
                     break;
                 }
 
@@ -110,12 +108,12 @@ void *session_worker() {
                 node->file.box_size += strlen(message) + 1;
                 if (tfs_close(box) == -1) {
                     WARN("Failed to close box");
-                    pipe_close(pipe);
                     break;
                 }
                 INFO("Writing %s", new_packet.payload.message_data.message);
             }
 
+            pipe_close(pipe);
             decrement_publishers(&list, payload.box_name);
             break;
         }
@@ -164,6 +162,11 @@ void *session_worker() {
                 pipe_write(pipe, &new_packet);
                 message += strlen(message) + 1;
             }
+            if (tfs_close(box) == -1) {
+                WARN("Failed to close box");
+                pipe_close(pipe);
+                break;
+            }
 
             while (true) {
                 // wait for publisher to write to box
@@ -171,8 +174,23 @@ void *session_worker() {
                 pthread_cond_wait(&node->file.cond, &node->file.lock);
                 pthread_mutex_unlock(&node->file.lock);
 
+                INFO("Opening box in TFS");
+                box = tfs_open(formatBoxName(payload.box_name), 0);
+                if (box == -1) {
+                    WARN("Failed to open box");
+                    break;
+                }
+
                 INFO("Subscriber woken up");
-                tfs_read(box, buffer, MESSAGE_SIZE);
+                if (tfs_read(box, buffer, MESSAGE_SIZE) == -1) {
+                    WARN("Failed to read from box");
+                    break;
+                }
+                if (tfs_close(box) == -1) {
+                    WARN("Failed to close box");
+                    break;
+                }
+
                 INFO("Sending %s", message);
                 memset(new_packet.payload.message_data.message, 0,
                        MESSAGE_SIZE);
@@ -265,6 +283,12 @@ void *session_worker() {
                        "Failed to delete box");
                 pipe_write(pipe, &new_packet);
                 break;
+            }
+
+            // broadcasts to all subscribers that the box has been deleted
+            ListNode *node = search_node(&list, payload.box_name);
+            if (node != NULL) {
+                pthread_cond_broadcast(&node->file.cond);
             }
 
             // removes tfs_file from tfs_list
