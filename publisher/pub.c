@@ -19,7 +19,7 @@ static char *clientPipeName;
 static int clientPipe;
 
 void close_publisher() {
-    INFO("Closing publisher...");
+    LOG("Closing publisher...");
     pipe_close(registerPipe);
     pipe_close(clientPipe);
     pipe_destroy(clientPipeName);
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     packet_t register_packet;
     registration_data_t registration_data;
 
-    INFO("Registering publisher");
+    LOG("Registering publisher");
 
     register_packet.opcode = REGISTER_PUBLISHER;
     memcpy(registration_data.client_pipe, clientPipeName,
@@ -65,10 +65,10 @@ int main(int argc, char **argv) {
 
     pipe_write(registerPipe, &register_packet);
 
-    INFO("Opening session pipe %s", clientPipeName);
+    LOG("Opening session pipe %s", clientPipeName);
     clientPipe = pipe_open(clientPipeName, O_WRONLY);
 
-    INFO("Waiting for user input");
+    LOG("Waiting for user input");
     // send new message for every new line until EOF is reached
     char buffer[MESSAGE_SIZE];
     while (fgets(buffer, MESSAGE_SIZE, stdin) != NULL) {
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
         memcpy(message_data.message, buffer, strcspn(buffer, "\n"));
         packet.payload.message_data = message_data;
 
-        INFO("Sending message: %s", packet.payload.message_data.message);
+        LOG("Sending message: %s", packet.payload.message_data.message);
 
         pipe_write(clientPipe, &packet);
     }

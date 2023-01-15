@@ -21,7 +21,7 @@ static int messagesReceived;
 
 void close_subscriber() {
     printf("Received %d messages\n", messagesReceived);
-    INFO("Closing subscriber...");
+    LOG("Closing subscriber...");
     pipe_close(registerPipe);
     pipe_close(clientPipe);
     pipe_destroy(clientPipeName);
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
     packet_t register_packet;
     registration_data_t registration_data;
 
-    INFO("Registering subscriber");
+    LOG("Registering subscriber");
 
     register_packet.opcode = REGISTER_SUBSCRIBER;
     memcpy(registration_data.client_pipe, clientPipeName,
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
 
     pipe_write(registerPipe, &register_packet);
 
-    INFO("Listening for Publisher messages");
+    LOG("Listening for Publisher messages");
 
     clientPipe = pipe_open(clientPipeName, O_RDONLY);
 

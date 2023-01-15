@@ -26,7 +26,7 @@ static void print_usage() {
 }
 
 void close_manager() {
-    INFO("Closing manager...");
+    LOG("Closing manager...");
     pipe_close(registerPipe);
     pipe_close(clientPipe);
     pipe_destroy(clientPipeName);
@@ -52,11 +52,11 @@ void handle_response(packet_t response) {
 void send_packet(packet_t packet) {
     pipe_create(clientPipeName);
 
-    INFO("Registering pipe: %s", clientPipeName);
+    LOG("Registering pipe: %s", clientPipeName);
     registerPipe = pipe_open(registerPipeName, O_WRONLY);
     pipe_write(registerPipe, &packet);
 
-    INFO("Waiting for confirmation");
+    LOG("Waiting for confirmation");
     clientPipe = pipe_open(clientPipeName, O_RDONLY);
     handle_response(pipe_read(clientPipe));
 }
@@ -100,12 +100,12 @@ int listBoxes() {
 
     pipe_create(clientPipeName);
 
-    INFO("Registering pipe: %s", clientPipeName);
+    LOG("Registering pipe: %s", clientPipeName);
 
     registerPipe = pipe_open(registerPipeName, O_WRONLY);
     pipe_write(registerPipe, &packet);
 
-    INFO("Waiting for list of boxes");
+    LOG("Waiting for list of boxes");
     clientPipe = pipe_open(clientPipeName, O_RDONLY);
     list_init(&list);
 
@@ -128,7 +128,7 @@ int listBoxes() {
         list_add(&list, new_file);
 
         if (data.last == 1) {
-            INFO("Last Box reached");
+            LOG("Last Box reached");
             break;
         }
     }
