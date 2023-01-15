@@ -33,6 +33,8 @@ void close_manager() {
 }
 
 void handle_response(packet_t response) {
+    // Handles a response from the server based on the opcode
+
     if (response.opcode != CREATE_MAILBOX_ANSWER &&
         response.opcode != REMOVE_MAILBOX_ANSWER &&
         response.opcode != LIST_MAILBOXES_ANSWER) {
@@ -50,6 +52,8 @@ void handle_response(packet_t response) {
 }
 
 void send_packet(packet_t packet) {
+    // Sends a packet to the server 
+
     pipe_create(clientPipeName);
 
     LOG("Registering pipe: %s", clientPipeName);
@@ -62,6 +66,8 @@ void send_packet(packet_t packet) {
 }
 
 int createBox(char *boxName) {
+    // Creates a box and adds it to manager list
+
     packet_t packet;
     registration_data_t payload;
     packet.opcode = CREATE_MAILBOX;
@@ -77,6 +83,8 @@ int createBox(char *boxName) {
 }
 
 int removeBox(char *boxName) {
+    // Removes a box from manager list
+
     packet_t packet;
     registration_data_t payload;
     packet.opcode = REMOVE_MAILBOX;
@@ -92,6 +100,9 @@ int removeBox(char *boxName) {
 }
 
 int listBoxes() {
+    // Lists all boxes alphabetically by box name and presents it
+
+    // Create packet
     packet_t packet;
     packet.opcode = LIST_MAILBOXES;
     list_box_data_t payload;
@@ -102,6 +113,7 @@ int listBoxes() {
 
     LOG("Registering pipe: %s", clientPipeName);
 
+    // Opens pipe and sends packet
     registerPipe = pipe_open(registerPipeName, O_WRONLY);
     pipe_write(registerPipe, &packet);
 
@@ -109,16 +121,18 @@ int listBoxes() {
     clientPipe = pipe_open(clientPipeName, O_RDONLY);
     list_init(&list);
 
-    // read from client pipe
+    // Read from client pipe
     packet_t response;
     while (read(clientPipe, &response, sizeof(packet_t)) > 0) {
         mailbox_data_t data = response.payload.mailbox_data;
 
+        // If there are no boxes
         if (response.payload.mailbox_data.box_name[0] == '\0') {
             fprintf(stdout, "NO BOXES FOUND\n");
             break;
         }
 
+        // Add box to manager list
         tfs_file new_file;
         strcpy(new_file.box_name, data.box_name);
         new_file.n_subscribers = data.n_subscribers;
@@ -127,6 +141,7 @@ int listBoxes() {
 
         list_add(&list, new_file);
 
+        // If we reach the last box
         if (data.last == 1) {
             LOG("Last Box reached");
             break;
@@ -155,27 +170,34 @@ int main(int argc, char **argv) {
     clientPipeName = argv[2];
     operation = argv[3];
 
-    // checks is clienePipeName is already in use with access
-    if (access(clientPipeName, F_OK) != -1) {
+     // checks is clientPipeName is already in use with access
+    if (access (clientPipeName, F_OK) != -1) {
         WARN("Client pipe name already in use");
         exit(EXIT_FAILURE);
     }
 
+    // If we are creating a box
     if (strcmp(operation, "create") == 0) {
+        // check if all arguments are present
         if (argc < 5) {
             print_usage();
             return EXIT_FAILURE;
         }
         char *boxName = argv[4];
         createBox(boxName);
-    } else if (strcmp(operation, "remove") == 0) {
+    }
+    // If we are removing a box 
+    else if (strcmp(operation, "remove") == 0) {
+        //check if all arguments are present
         if (argc < 5) {
             print_usage();
             return EXIT_FAILURE;
         }
         char *boxName = argv[4];
         removeBox(boxName);
-    } else if (strcmp(operation, "list") == 0) {
+    }
+    // If we are listing boxes 
+    else if (strcmp(operation, "list") == 0) {
         listBoxes();
     } else {
         print_usage();
