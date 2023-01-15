@@ -53,6 +53,19 @@ void pipe_write(int pipe, packet_t *packet) {
     PANIC("Failed to write to pipe");
 }
 
+packet_t pipe_read(int pipe) {
+    packet_t packet;
+    int i;
+    for (i = 0; i < RETRY_COUNT; i++) {
+        if (read(pipe, &packet, sizeof(packet_t)) >= 0) {
+            return packet;
+        }
+        WARN("Failed to read from pipe, retrying...");
+        wait_retry();
+    }
+    PANIC("Failed to read from pipe");
+}
+
 void pipe_close(int pipe) {
     if (close(pipe) < 0) {
         PANIC("Failed to close pipe");

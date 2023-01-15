@@ -59,10 +59,10 @@ int main(int argc, char **argv) {
 
     pipe_write(registerPipe, &register_packet);
 
-    INFO("Waiting for user input");
-
+    INFO("Opening session pipe %s", clientPipeName);
     clientPipe = pipe_open(clientPipeName, O_WRONLY);
 
+    INFO("Waiting for user input");
     // send new message for every new line until EOF is reached
     char buffer[MESSAGE_SIZE];
     while (fgets(buffer, MESSAGE_SIZE, stdin) != NULL) {

@@ -43,6 +43,18 @@ void handle_response(packet_t response) {
     }
 }
 
+void send_packet(packet_t packet) {
+    pipe_create(clientPipeName);
+
+    INFO("Registering pipe: %s", clientPipeName);
+    registerPipe = pipe_open(registerPipeName, O_WRONLY);
+    pipe_write(registerPipe, &packet);
+
+    INFO("Waiting for confirmation");
+    clientPipe = pipe_open(clientPipeName, O_RDONLY);
+    handle_response(pipe_read(clientPipe));
+}
+
 int createBox(char *boxName) {
     packet_t packet;
     registration_data_t payload;
@@ -51,23 +63,8 @@ int createBox(char *boxName) {
     strcpy(payload.client_pipe, clientPipeName);
     packet.payload.registration_data = payload;
 
-    pipe_create(clientPipeName);
+    send_packet(packet);
 
-    registerPipe = pipe_open(registerPipeName, O_WRONLY);
-
-    // write to register pipe
-    pipe_write(registerPipe, &packet);
-
-    clientPipe = pipe_open(clientPipeName, O_RDONLY);
-
-    // read from client pipe
-    packet_t response;
-    if (read(clientPipe, &response, sizeof(packet_t)) == -1) {
-        fprintf(stderr, "Error reading from client pipe");
-        return EXIT_FAILURE;
-    }
-
-    handle_response(response);
     close_manager();
 
     return 0;
@@ -81,21 +78,8 @@ int removeBox(char *boxName) {
     strcpy(payload.client_pipe, clientPipeName);
     packet.payload.registration_data = payload;
 
-    pipe_create(clientPipeName);
+    send_packet(packet);
 
-    registerPipe = pipe_open(registerPipeName, O_WRONLY);
-    pipe_write(registerPipe, &packet);
-
-    clientPipe = pipe_open(clientPipeName, O_RDONLY);
-
-    // read from client pipe
-    packet_t response;
-    if (read(clientPipe, &response, sizeof(packet_t)) == -1) {
-        fprintf(stderr, "Error reading from client pipe");
-        return EXIT_FAILURE;
-    }
-
-    handle_response(response);
     close_manager();
 
     return 0;
@@ -110,11 +94,13 @@ int listBoxes() {
 
     pipe_create(clientPipeName);
 
+    INFO("Registering pipe: %s", clientPipeName);
+
     registerPipe = pipe_open(registerPipeName, O_WRONLY);
     pipe_write(registerPipe, &packet);
 
+    INFO("Waiting for list of boxes");
     clientPipe = pipe_open(clientPipeName, O_RDONLY);
-
     list_init(&list);
 
     // read from client pipe
@@ -131,6 +117,7 @@ int listBoxes() {
         strcpy(new_file.box_name, data.box_name);
         new_file.n_subscribers = data.n_subscribers;
         new_file.n_publishers = data.n_publishers;
+        new_file.box_size = data.box_size;
 
         list_add(&list, new_file);
 

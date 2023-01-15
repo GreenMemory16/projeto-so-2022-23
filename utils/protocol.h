@@ -62,8 +62,8 @@ typedef struct __attribute__((packed)) packet_t {
 typedef struct worker_t {
     int id;
     pthread_t thread;
-    pthread_mutex_t lock;
-    pthread_cond_t cond;
+    // pthread_mutex_t lock;
+    // pthread_cond_t cond;
 } worker_t;
 
 typedef struct tfs_file {

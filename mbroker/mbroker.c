@@ -24,7 +24,6 @@ static worker_t *workers;
 static sem_t hasNewMessage;
 static pc_queue_t queue;
 static List list;
-static int n_boxes;
 
 const tfs_params params = {
     .max_inode_count = 64,
@@ -52,6 +51,7 @@ char *formatBoxName(char *boxName) {
 void *session_worker(void *args) {
     worker_t *worker = (worker_t *)args;
     while (true) {
+        INFO("Worker %d waiting for new message", worker->id);
         sem_wait(&hasNewMessage);
         INFO("Worker %d has new message", worker->id);
         packet_t packet = *(packet_t *)pcq_dequeue(&queue);
@@ -62,23 +62,31 @@ void *session_worker(void *args) {
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
-            int pipe = pipe_open(pipeName, O_RDONLY);
-
-            // increment box publisher
+            INFO("Verifying box exists");
             ListNode *node = search_node(&list, payload.box_name);
-            if (node != NULL) {
-                node->file.n_publishers++;
-            }
-
-            // open TFS box
-            int box = tfs_open(formatBoxName(payload.box_name), TFS_O_APPEND);
-            if (box == -1) {
-                WARN("Failed to open box");
-                pipe_close(pipe);
+            if (node == NULL) {
+                WARN("Box does not exist");
                 break;
             }
 
-            // wait for new message and write to box
+            if (node->file.n_publishers > 0) {
+                WARN("Too many publishers");
+                break;
+            }
+
+            INFO("Opening box in TFS");
+            int box = tfs_open(formatBoxName(payload.box_name), TFS_O_APPEND);
+            if (box == -1) {
+                WARN("Failed to open box");
+                break;
+            }
+
+            increment_publishers(&list, payload.box_name);
+            DEBUG("Publishers: %ld", node->file.n_publishers);
+
+            INFO("Waiting to receive messages in %s", pipeName);
+            int pipe = pipe_open(pipeName, O_RDONLY);
+
             packet_t new_packet;
             char *message;
             while (try_read(pipe, &new_packet, sizeof(packet_t)) > 0) {
@@ -86,12 +94,11 @@ void *session_worker(void *args) {
                 if (tfs_write(box, message, strlen(message) + 1) == -1) {
                     fprintf(stderr, "Failed to write to box\n");
                 }
+                node->file.box_size += strlen(message) + 1;
                 INFO("Writing %s", new_packet.payload.message_data.message);
             }
 
-            // decrement box publisher
-            node->file.n_publishers--;
-
+            decrement_publishers(&list, payload.box_name);
             break;
         }
         case REGISTER_SUBSCRIBER: {
@@ -99,21 +106,28 @@ void *session_worker(void *args) {
             registration_data_t payload = packet.payload.registration_data;
             char *pipeName = payload.client_pipe;
 
-            int pipe = pipe_open(pipeName, O_WRONLY);
+            INFO("Verifying box exists");
+            ListNode *node = search_node(&list, payload.box_name);
+            if (node == NULL) {
+                WARN("Box does not exist");
+                break;
+            }
 
-            // open TFS box
+            INFO("Opening box in TFS");
             int box = tfs_open(formatBoxName(payload.box_name), 0);
             if (box == -1) {
                 WARN("Failed to open box");
+                // the pipe is opened and then closed to notify the client that
+                // the box does not exist
+                int pipe = pipe_open(pipeName, O_WRONLY);
                 pipe_close(pipe);
                 break;
             }
 
-            // increment box subscribers
-            ListNode *node = search_node(&list, payload.box_name);
-            if (node != NULL) {
-                node->file.n_subscribers++;
-            }
+            increment_subscribers(&list, payload.box_name);
+
+            INFO("Waiting to write messages");
+            int pipe = pipe_open(pipeName, O_WRONLY);
 
             // send messages to subscriber
             char buffer[MESSAGE_SIZE];
@@ -135,9 +149,7 @@ void *session_worker(void *args) {
 
             pipe_close(pipe);
 
-            // decrement box subscribers
-            node->file.n_subscribers--;
-
+            decrement_subscribers(&list, payload.box_name);
             break;
         }
         case CREATE_MAILBOX: {
@@ -151,6 +163,20 @@ void *session_worker(void *args) {
             packet_t new_packet;
             new_packet.opcode = CREATE_MAILBOX_ANSWER;
 
+            INFO("Checking if box already exists");
+
+            if (search_node(&list, payload.box_name) != NULL) {
+                WARN("Box already exists");
+                new_packet.payload.answer_data.return_code = -1;
+                strcpy(new_packet.payload.answer_data.error_message,
+                       "Box already exists");
+                pipe_write(pipe, &new_packet);
+                pipe_close(pipe);
+                break;
+            }
+
+            INFO("Creating box in TFS");
+
             // Creates Mailbox
             int box = tfs_open(formatBoxName(payload.box_name), TFS_O_CREAT);
             if (box == -1) {
@@ -163,25 +189,16 @@ void *session_worker(void *args) {
                 break;
             }
 
-            if (list_find(&list, payload.box_name) != 0) {
-                WARN("Box already exists");
-                new_packet.payload.answer_data.return_code = -1;
-                strcpy(new_packet.payload.answer_data.error_message,
-                       "Box already exists");
-                pipe_write(pipe, &new_packet);
-                pipe_close(pipe);
-                break;
-            }
+            INFO("Adding box to list");
 
             // adds file to the list
             tfs_file new_file;
             strcpy(new_file.box_name, payload.box_name);
             new_file.n_publishers = 0;
             new_file.n_subscribers = 0;
+            new_file.box_size = 0;
 
             list_add(&list, new_file);
-
-            n_boxes++;
 
             // Sends "OK" message to manager
             new_packet.payload.answer_data.return_code = 0;
@@ -221,8 +238,6 @@ void *session_worker(void *args) {
                 list_remove(&list, NULL, list.head);
             }
 
-            n_boxes--;
-
             // Sends "OK" message to manager
             new_packet.payload.answer_data.return_code = 0;
             pipe_write(pipe, &new_packet);
@@ -241,7 +256,7 @@ void *session_worker(void *args) {
             packet_t new_packet;
             new_packet.opcode = LIST_MAILBOXES_ANSWER;
 
-            if (n_boxes == 0) {
+            if (list.size == 0) {
                 new_packet.payload.mailbox_data.last = 1;
                 memset(new_packet.payload.mailbox_data.box_name, 0,
                        sizeof(new_packet.payload.mailbox_data.box_name));
@@ -284,12 +299,12 @@ int start_server() {
     workers = malloc(sizeof(worker_t) * maxSessions);
     for (int i = 0; i < maxSessions; ++i) {
         workers[i].id = i;
-        if (pthread_mutex_init(&workers[i].lock, NULL) != 0) {
-            return -1;
-        }
-        if (pthread_cond_init(&workers[i].cond, NULL) != 0) {
-            return -1;
-        }
+        // if (pthread_mutex_init(&workers[i].lock, NULL) != 0) {
+        //     return -1;
+        // }
+        // if (pthread_cond_init(&workers[i].cond, NULL) != 0) {
+        //     return -1;
+        // }
         if (pthread_create(&workers[i].thread, NULL, session_worker,
                            &workers[i]) != 0) {
             return -1;
@@ -351,6 +366,7 @@ int main(int argc, char **argv) {
 
         packet_t packet;
         while (try_read(registerPipe, &packet, sizeof(packet_t)) > 0) {
+            INFO("Received packet with opcode %d", packet.opcode);
             pcq_enqueue(&queue, &packet);
             sem_post(&hasNewMessage);
         }

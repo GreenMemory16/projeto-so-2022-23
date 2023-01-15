@@ -24,32 +24,23 @@ void list_add(List *list, tfs_file file) {
         list->tail->next = node;
         list->tail = node;
     }
+    list->size++;
     pthread_mutex_unlock(&list->lock);
-}
-
-int list_find(List *list, char *box_name) {
-    ListNode *node = list->head;
-
-    while (node != NULL) {
-        if (strcmp(node->file.box_name, box_name) == 0) {
-            return 1;
-        }
-        node = node->next;
-    }
-    return 0;
 }
 
 void list_remove(List *list, ListNode *prev, ListNode *node) {
     pthread_mutex_lock(&list->lock);
-    if (node == NULL)
+    if (node == NULL) {
+        pthread_mutex_unlock(&list->lock);
         return;
-
+    }
     if (prev == NULL) {
         list->head = node->next;
     } else {
         prev->next = node->next;
     }
     free(node);
+    list->size--;
     pthread_mutex_unlock(&list->lock);
 }
 
@@ -66,6 +57,8 @@ void list_destroy(List *list) {
 }
 
 void list_print(List *list) {
+    pthread_mutex_lock(&list->lock);
+
     ListNode *node = list->head;
 
     while (node != NULL) {
@@ -74,6 +67,7 @@ void list_print(List *list) {
                 node->file.n_subscribers);
         node = node->next;
     }
+    pthread_mutex_unlock(&list->lock);
 }
 
 void list_sort(List *list) {
@@ -105,31 +99,103 @@ void list_sort(List *list) {
 }
 
 ListNode *search_prev_node(List *list, char *box_name) {
+    pthread_mutex_lock(&list->lock);
+
     ListNode *node = list->head;
 
     // if we want to remove the head, there is no previous node
-    if (strcmp(node->file.box_name, box_name) == 0)
+    if (strcmp(node->file.box_name, box_name) == 0) {
+        pthread_mutex_unlock(&list->lock);
         return NULL;
+    }
 
     while (node->next != NULL) {
         if (strcmp(node->next->file.box_name, box_name) == 0) {
+            pthread_mutex_unlock(&list->lock);
             return node;
         }
         node = node->next;
     }
-
+    pthread_mutex_unlock(&list->lock);
     return NULL;
 }
 
 ListNode *search_node(List *list, char *box_name) {
+    pthread_mutex_lock(&list->lock);
     ListNode *node = list->head;
 
     while (node != NULL) {
         if (strcmp(node->file.box_name, box_name) == 0) {
+            pthread_mutex_unlock(&list->lock);
             return node;
         }
         node = node->next;
     }
 
+    pthread_mutex_unlock(&list->lock);
     return NULL;
+}
+
+void increment_publishers(List *list, char *box_name) {
+    pthread_mutex_lock(&list->lock);
+    ListNode *node = list->head;
+
+    while (node != NULL) {
+        if (strcmp(node->file.box_name, box_name) == 0) {
+            node->file.n_publishers++;
+            pthread_mutex_unlock(&list->lock);
+            return;
+        }
+        node = node->next;
+    }
+
+    pthread_mutex_unlock(&list->lock);
+}
+
+void decrement_publishers(List *list, char *box_name) {
+    pthread_mutex_lock(&list->lock);
+    ListNode *node = list->head;
+
+    while (node != NULL) {
+        if (strcmp(node->file.box_name, box_name) == 0) {
+            node->file.n_publishers--;
+            pthread_mutex_unlock(&list->lock);
+            return;
+        }
+        node = node->next;
+    }
+
+    pthread_mutex_unlock(&list->lock);
+}
+
+void increment_subscribers(List *list, char *box_name) {
+    pthread_mutex_lock(&list->lock);
+    ListNode *node = list->head;
+
+    while (node != NULL) {
+        if (strcmp(node->file.box_name, box_name) == 0) {
+            node->file.n_subscribers++;
+            pthread_mutex_unlock(&list->lock);
+            return;
+        }
+        node = node->next;
+    }
+
+    pthread_mutex_unlock(&list->lock);
+}
+
+void decrement_subscribers(List *list, char *box_name) {
+    pthread_mutex_lock(&list->lock);
+    ListNode *node = list->head;
+
+    while (node != NULL) {
+        if (strcmp(node->file.box_name, box_name) == 0) {
+            node->file.n_subscribers--;
+            pthread_mutex_unlock(&list->lock);
+            return;
+        }
+        node = node->next;
+    }
+
+    pthread_mutex_unlock(&list->lock);
 }
