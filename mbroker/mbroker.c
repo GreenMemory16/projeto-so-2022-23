@@ -55,6 +55,7 @@ void *session_worker(void *args) {
         sem_wait(&hasNewMessage);
         INFO("Worker %d has new message", worker->id);
         packet_t packet = *(packet_t *)pcq_dequeue(&queue);
+        INFO("Worker %d dequeued message", worker->id);
 
         switch (packet.opcode) {
         case REGISTER_PUBLISHER: {
@@ -264,6 +265,7 @@ void *session_worker(void *args) {
             } else {
                 // Send message for each mailbox
                 ListNode *node = list.head;
+                // TODO: remove duplicate code here
                 while (node->next != NULL) {
                     strcpy(new_packet.payload.mailbox_data.box_name,
                            node->file.box_name);
@@ -271,6 +273,8 @@ void *session_worker(void *args) {
                         node->file.n_publishers;
                     new_packet.payload.mailbox_data.n_subscribers =
                         node->file.n_subscribers;
+                    new_packet.payload.mailbox_data.box_size =
+                        node->file.box_size;
                     new_packet.payload.mailbox_data.last = 0;
                     pipe_write(pipe, &new_packet);
                     node = node->next;
@@ -278,6 +282,11 @@ void *session_worker(void *args) {
                 new_packet.payload.mailbox_data.last = 1;
                 strcpy(new_packet.payload.mailbox_data.box_name,
                        node->file.box_name);
+                new_packet.payload.mailbox_data.n_publishers =
+                    node->file.n_publishers;
+                new_packet.payload.mailbox_data.n_subscribers =
+                    node->file.n_subscribers;
+                new_packet.payload.mailbox_data.box_size = node->file.box_size;
                 pipe_write(pipe, &new_packet);
             }
 
@@ -285,6 +294,7 @@ void *session_worker(void *args) {
             break;
         }
         default: {
+            WARN("Invalid opcode");
             break;
         }
         }
