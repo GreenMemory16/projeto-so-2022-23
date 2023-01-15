@@ -95,6 +95,11 @@ void *session_worker(void *args) {
                 if (tfs_write(box, message, strlen(message) + 1) == -1) {
                     fprintf(stderr, "Failed to write to box\n");
                 }
+
+                // signals condvar to wake up subscribers reading
+                // printf("WAKING UP SUBSCRIBERS\n");
+                // pthread_cond_signal(&node->file.cond);
+                
                 node->file.box_size += strlen(message) + 1;
                 INFO("Writing %s", new_packet.payload.message_data.message);
             }
@@ -130,6 +135,7 @@ void *session_worker(void *args) {
             INFO("Waiting to write messages");
             int pipe = pipe_open(pipeName, O_WRONLY);
 
+            printf("SUBBBB\n");
             // send messages to subscriber
             char buffer[MESSAGE_SIZE];
             memset(buffer, 0, MESSAGE_SIZE);
@@ -147,6 +153,26 @@ void *session_worker(void *args) {
             }
 
             // TODO: listen for new messages by publisher
+            // tfs_file new_file = search_node(&list, payload.box_name)->file;
+            // pthread_cond_init(&new_file.cond, NULL);
+            // pthread_mutex_init(&new_file.lock, NULL);
+            
+            // while (true) {
+            //     pthread_mutex_lock(&new_file.lock);
+            //     pthread_cond_wait(&new_file.cond, &new_file.lock);
+            //     pthread_mutex_unlock(&new_file.lock);
+
+            //     printf("SUBSCRIBER WOKEN UP\n");
+            //     tfs_read(box, buffer, MESSAGE_SIZE);
+            //     while (strlen(message) > 0) {
+            //         INFO("Sending %s", message);
+            //         memset(new_packet.payload.message_data.message, 0,
+            //                MESSAGE_SIZE);
+            //         strcpy(new_packet.payload.message_data.message, message);
+            //         pipe_write(pipe, &new_packet);
+            //         message += strlen(message) + 1;
+            //     }
+            // }
 
             pipe_close(pipe);
 
@@ -265,8 +291,7 @@ void *session_worker(void *args) {
             } else {
                 // Send message for each mailbox
                 ListNode *node = list.head;
-                // TODO: remove duplicate code here
-                while (node->next != NULL) {
+                while (node != NULL) {
                     strcpy(new_packet.payload.mailbox_data.box_name,
                            node->file.box_name);
                     new_packet.payload.mailbox_data.n_publishers =
@@ -275,19 +300,16 @@ void *session_worker(void *args) {
                         node->file.n_subscribers;
                     new_packet.payload.mailbox_data.box_size =
                         node->file.box_size;
-                    new_packet.payload.mailbox_data.last = 0;
+
+                    if (node->next == NULL) {
+                        new_packet.payload.mailbox_data.last = 1;
+                    }
+                    else {
+                        new_packet.payload.mailbox_data.last = 0;
+                    }
                     pipe_write(pipe, &new_packet);
                     node = node->next;
                 }
-                new_packet.payload.mailbox_data.last = 1;
-                strcpy(new_packet.payload.mailbox_data.box_name,
-                       node->file.box_name);
-                new_packet.payload.mailbox_data.n_publishers =
-                    node->file.n_publishers;
-                new_packet.payload.mailbox_data.n_subscribers =
-                    node->file.n_subscribers;
-                new_packet.payload.mailbox_data.box_size = node->file.box_size;
-                pipe_write(pipe, &new_packet);
             }
 
             pipe_close(pipe);

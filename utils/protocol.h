@@ -71,6 +71,8 @@ typedef struct tfs_file {
     uint64_t n_publishers;
     uint64_t n_subscribers;
     uint64_t box_size;
+    pthread_cond_t cond;
+    pthread_mutex_t lock;
 } tfs_file;
 
 #endif
