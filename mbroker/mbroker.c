@@ -7,7 +7,6 @@
 #include "pthread.h"
 #include "utils.h"
 #include <fcntl.h>
-#include <semaphore.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -20,10 +19,9 @@
 static int registerPipe;
 static char *registerPipeName;
 static size_t maxSessions;
-static worker_t *workers;
-static sem_t hasNewMessage;
-static pc_queue_t queue;
 static List list;
+pthread_t *workers;
+pc_queue_t queue;
 
 const tfs_params params = {
     .max_inode_count = 64,
@@ -48,14 +46,11 @@ char *formatBoxName(char *boxName) {
     return formattedBoxName;
 }
 
-void *session_worker(void *args) {
-    worker_t *worker = (worker_t *)args;
+void *session_worker() {
     while (true) {
-        INFO("Worker %d waiting for new message", worker->id);
-        sem_wait(&hasNewMessage);
-        INFO("Worker %d has new message", worker->id);
+        INFO("Worker waiting for new message");
         packet_t packet = *(packet_t *)pcq_dequeue(&queue);
-        INFO("Worker %d dequeued message", worker->id);
+        INFO("Worker dequeued message");
 
         switch (packet.opcode) {
         case REGISTER_PUBLISHER: {
@@ -102,7 +97,7 @@ void *session_worker(void *args) {
                 // signals condvar to wake up subscribers reading
                 printf("WAKING UP SUBSCRIBERS\n");
                 pthread_cond_signal(&node->file.cond);
-                
+
                 node->file.box_size += strlen(message) + 1;
                 INFO("Writing %s", new_packet.payload.message_data.message);
             }
@@ -158,7 +153,7 @@ void *session_worker(void *args) {
             tfs_file new_file = search_node(&list, payload.box_name)->file;
             pthread_cond_init(&new_file.cond, NULL);
             pthread_mutex_init(&new_file.lock, NULL);
-            
+
             while (true) {
                 pthread_mutex_lock(&new_file.lock);
                 pthread_cond_wait(&new_file.cond, &new_file.lock);
@@ -226,8 +221,8 @@ void *session_worker(void *args) {
             new_file.n_publishers = 0;
             new_file.n_subscribers = 0;
             new_file.box_size = 0;
-            //pthread_cond_init(&new_file.cond, NULL);
-            //pthread_mutex_init(&new_file.lock, NULL);
+            // pthread_cond_init(&new_file.cond, NULL);
+            // pthread_mutex_init(&new_file.lock, NULL);
 
             list_add(&list, new_file);
 
@@ -307,8 +302,7 @@ void *session_worker(void *args) {
 
                     if (node->next == NULL) {
                         new_packet.payload.mailbox_data.last = 1;
-                    }
-                    else {
+                    } else {
                         new_packet.payload.mailbox_data.last = 0;
                     }
                     pipe_write(pipe, &new_packet);
@@ -325,28 +319,8 @@ void *session_worker(void *args) {
         }
         }
 
-        INFO("Worker %d finished", worker->id);
+        INFO("Worker finished");
     }
-}
-
-int start_server() {
-    list_init(&list);
-
-    workers = malloc(sizeof(worker_t) * maxSessions);
-    for (int i = 0; i < maxSessions; ++i) {
-        workers[i].id = i;
-        // if (pthread_mutex_init(&workers[i].lock, NULL) != 0) {
-        //     return -1;
-        // }
-        // if (pthread_cond_init(&workers[i].cond, NULL) != 0) {
-        //     return -1;
-        // }
-        if (pthread_create(&workers[i].thread, NULL, session_worker,
-                           &workers[i]) != 0) {
-            return -1;
-        }
-    }
-    return 0;
 }
 
 void close_server(int status) {
@@ -371,20 +345,15 @@ int main(int argc, char **argv) {
 
     registerPipeName = argv[1];
     maxSessions = strtoul(argv[2], NULL, 10);
+
     INFO("Starting server with pipe named %s", registerPipeName);
 
-    if (start_server() != 0) {
-        printf("Failed: Couldn't start server\n");
-        return EXIT_FAILURE;
-    }
-
-    // create queue
+    list_init(&list);
     pcq_create(&queue, maxSessions);
 
-    // initialize semaphore
-    if (sem_init(&hasNewMessage, 0, 0) != 0) {
-        perror("Failed to initialize semaphore\n");
-        exit(EXIT_FAILURE);
+    workers = malloc(sizeof(pthread_t) * maxSessions);
+    for (int i = 0; i < maxSessions; ++i) {
+        pthread_create(&workers[i], NULL, session_worker, NULL);
     }
 
     // start TFS filesystem
@@ -404,7 +373,6 @@ int main(int argc, char **argv) {
         while (try_read(registerPipe, &packet, sizeof(packet_t)) > 0) {
             INFO("Received packet with opcode %d", packet.opcode);
             pcq_enqueue(&queue, &packet);
-            sem_post(&hasNewMessage);
         }
     }
 
