@@ -59,13 +59,6 @@ typedef struct __attribute__((packed)) packet_t {
     } payload;
 } packet_t;
 
-typedef struct worker_t {
-    int id;
-    pthread_t thread;
-    // pthread_mutex_t lock;
-    // pthread_cond_t cond;
-} worker_t;
-
 typedef struct tfs_file {
     char box_name[BOX_NAME_SIZE + 1];
     uint64_t n_publishers;

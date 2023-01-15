@@ -92,9 +92,8 @@ void *session_worker() {
             char *message;
             while (true) {
                 // Reads packet from publisher
-                if (try_read(pipe, &new_packet, sizeof(packet_t)) <= 0) 
+                if (try_read(pipe, &new_packet, sizeof(packet_t)) <= 0)
                     break;
-                
 
                 message = new_packet.payload.message_data.message;
                 INFO("Opening box in TFS");
@@ -140,7 +139,7 @@ void *session_worker() {
             // Looks for the box in the list
             ListNode *node = search_node(&list, payload.box_name);
 
-            // If box does not exist, sends error message 
+            // If box does not exist, sends error message
             if (node == NULL) {
                 WARN("Box does not exist");
                 // The pipe is opened and then closed to notify the client that
@@ -154,7 +153,7 @@ void *session_worker() {
 
             // Open box in TFS
             int box = tfs_open(formatBoxName(payload.box_name), 0);
-            // If box creation fails, sends error message 
+            // If box creation fails, sends error message
             if (box == -1) {
                 WARN("Failed to open box");
                 int pipe = pipe_open(pipeName, O_WRONLY);
@@ -245,7 +244,7 @@ void *session_worker() {
 
             // Creates Mailbox
             int box = tfs_open(formatBoxName(payload.box_name), TFS_O_CREAT);
-            // If box creation fails, sends error message 
+            // If box creation fails, sends error message
             if (box == -1) {
                 WARN("Failed to create box");
                 new_packet.payload.answer_data.return_code = -1;
