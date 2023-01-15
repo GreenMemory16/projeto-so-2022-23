@@ -3,6 +3,8 @@ manager/manager
 publisher/pub
 subscriber/sub
 
+*.zip
+
 # Prerequisites
 *.d
 

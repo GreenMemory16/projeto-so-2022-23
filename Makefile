@@ -68,7 +68,7 @@ endif
 
 # A phony target is one that is not really the name of a file
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: all clean depend fmt
+.PHONY: all clean depend fmt zip
 
 all: $(TARGET_EXECS)
 
@@ -104,3 +104,6 @@ clean:
 # Run `make depend` whenever you add new includes in your files
 depend : $(SOURCES)
 	$(CC) $(INCLUDES) -MM $^ > autodep
+
+zip: clean
+	zip -r projeto-2.zip *
