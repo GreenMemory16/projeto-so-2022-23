@@ -197,7 +197,7 @@ void *session_worker() {
                 INFO("Sending %s", message);
                 memset(new_packet.payload.message_data.message, 0,
                        MESSAGE_SIZE);
-                strcpy(new_packet.payload.message_data.message, message);
+                strcpy(new_packet.payload.message_data.message, buffer);
                 if (write(pipe, &new_packet, sizeof(packet_t)) == -1) {
                     break;
                 }
